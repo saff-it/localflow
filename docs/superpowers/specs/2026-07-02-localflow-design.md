@@ -16,7 +16,7 @@ Sources: [wisprflow.ai/post/technical-challenges](https://wisprflow.ai/post/tech
 
 ## 2. Goal / non-goals
 
-**Goal**: the same interaction — hold a key, speak (Italian or English), release, polished text lands in the focused app — with **zero bytes leaving the Mac**. Models are downloaded once, then everything runs offline.
+**Goal**: the same interaction — hold a key, speak (Italian, English or Spanish), release, polished text lands in the focused app — with **zero bytes leaving the Mac**. Models are downloaded once, then everything runs offline.
 
 **Non-goals (v1)**: Windows/mobile, streaming partial transcripts while speaking, learning from corrections, menu-bar GUI, sub-700 ms latency parity (local target: "feels immediate", ~1–3 s for a typical utterance on Apple Silicon CPU).
 
@@ -25,7 +25,7 @@ Sources: [wisprflow.ai/post/technical-challenges](https://wisprflow.ai/post/tech
 | Question I'd have asked | Assumed answer | Why |
 |---|---|---|
 | Platform? | macOS only | It's "my machine" — an M-series Mac (verified arm64, macOS 26.5) |
-| Languages? | Italian + English, auto-detect | User works in both; Whisper auto-detects per utterance |
+| Languages? | Italian + English + Spanish, auto-detect | User works in all three (the landing site itself is IT/EN/ES/PT); Whisper auto-detects per utterance, `asr.language` can force one |
 | Hotkey UX? | Hold-to-talk, default **right Option** | Wispr's core interaction; `fn` can't be captured without a native event tap — documented limitation |
 | Stack? | Python 3.9-compatible package | Only system Python 3.9.6 present; no Homebrew Python install forced on the user |
 | ASR engine? | **faster-whisper** (CTranslate2, CPU int8) | pip-only install (no compile), multilingual, `small` default / `large-v3-turbo` documented upgrade |

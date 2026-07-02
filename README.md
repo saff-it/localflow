@@ -1,6 +1,6 @@
 # LocalFlow
 
-Private, fully-local voice dictation for macOS — a Wispr Flow-style workflow where **nothing ever leaves your Mac**. Hold a key, speak (Italian, English, anything Whisper knows), release: polished text is pasted into whatever app has focus.
+Private, fully-local voice dictation for macOS — a Wispr Flow-style workflow where **nothing ever leaves your Mac**. Hold a key, speak (Italian, English, Spanish — anything Whisper knows), release: polished text is pasted into whatever app has focus.
 
 Wispr Flow sends every utterance to cloud ASR + a fine-tuned Llama on Baseten. LocalFlow runs the same two-stage pipeline on-device: **faster-whisper** for speech recognition and (optionally) a small **Llama via Ollama** for Wispr-style cleanup — fillers removed, self-corrections applied, tone matched to the app you're pasting into. The design rationale lives in [docs/superpowers/specs/2026-07-02-localflow-design.md](docs/superpowers/specs/2026-07-02-localflow-design.md).
 
@@ -47,7 +47,7 @@ Other commands:
 Created with commented defaults on first run. The interesting knobs:
 
 - `asr.model` — `small` (default, fast) → `large-v3-turbo` (Wispr-level accuracy, ~1.5 GB download, still fine on Apple Silicon).
-- `asr.language` — empty = auto-detect per utterance; set `"it"` to force Italian.
+- `asr.language` — empty = auto-detect per utterance; set `"it"`, `"en"` or `"es"` to force one (useful for short phrases, where Italian and Spanish can be confused).
 - `hotkey.key` — `alt_r` default. (`fn` like Wispr needs a native event tap — not possible from Python; roadmap.)
 - `dictionary.terms` — names/jargon Whisper should get right (biases the model, like Wispr's personal dictionary).
 - `dictionary.replacements` — hard "wrong" = "right" corrections applied after transcription.
@@ -87,7 +87,7 @@ Save as `~/Library/LaunchAgents/com.localflow.plist` (adjust the path), then `la
 - **Nothing pastes, but the text is on the clipboard** → Accessibility permission missing.
 - **Hotkey does nothing** → Input Monitoring permission missing (and restart the terminal).
 - **Empty transcripts** → Microphone permission missing, or utterance under 0.3 s.
-- **Wrong language detected on short phrases** → set `asr.language = "it"` (or `"en"`).
+- **Wrong language detected on short phrases** → set `asr.language = "it"` (or `"en"`, `"es"`).
 - **Slow on long dictations** → drop to `small`, or upgrade quality/speed later via the native roadmap.
 
 ## Privacy

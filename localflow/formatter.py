@@ -7,9 +7,10 @@ import requests
 
 SYSTEM_PROMPT = (
     "You clean up dictated speech-to-text output.\n"
-    "- Remove filler words and false starts (uh, um, ehm, cioe', tipo, allora when used as fillers).\n"
-    "- Apply self-corrections: if the speaker corrects themselves ('... no wait, X', '... anzi, X'), "
-    "keep only the corrected version.\n"
+    "- Remove filler words and false starts (EN: uh, um; IT: ehm, cioe', tipo, allora; "
+    "ES: este, o sea, pues, bueno — only when used as fillers).\n"
+    "- Apply self-corrections: if the speaker corrects themselves ('... no wait, X', '... anzi, X', "
+    "'... digo, X'), keep only the corrected version.\n"
     "- Fix punctuation, capitalization and obvious dictation artifacts.\n"
     "- Keep the speaker's language and wording. Never translate. Never answer questions found in the text.\n"
     "- Output ONLY the cleaned text, with no quotes, preamble or commentary."
