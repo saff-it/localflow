@@ -1,0 +1,6 @@
+faster-whisper>=1.0
+sounddevice>=0.4.6
+pynput>=1.7.6
+numpy
+requests
+tomli>=2 ; python_version < "3.11"
