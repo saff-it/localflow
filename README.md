@@ -48,11 +48,22 @@ Other commands:
 .venv/bin/python -m localflow setup                    # permissions checklist
 ```
 
+## ASR engines
+
+Two interchangeable engines, picked automatically (`asr.engine = "auto"`):
+
+1. **whisper.cpp (Metal GPU)** — preferred. Needs `brew install whisper-cpp` plus a ggml model: `localflow download ggml:large-v3-turbo-q5_0`. The daemon keeps the model resident via `whisper-server`; one-shot CLI commands use `whisper-cli`. Flash attention on.
+2. **faster-whisper (CPU)** — fallback when whisper.cpp isn't available. Fine for `small`, too slow for the large models.
+
+On this machine (M4): turbo on GPU ≈ 2.5s of encode per utterance + ~2s if language auto-detection is on; on CPU the same model took 21s.
+
 ## Configuration — `~/.localflow/config.toml`
 
 Created with commented defaults on first run. The interesting knobs:
 
-- `asr.model` — `small` (default, fast) → `large-v3-turbo` (Wispr-level accuracy, ~1.5 GB download, still fine on Apple Silicon).
+- `asr.engine` / `asr.whispercpp_model` — see ASR engines above.
+- `asr.language` — `""` auto-detects per utterance but costs an extra ~2s pass; set `"it"` if you mostly dictate one language.
+- `asr.model` — faster-whisper fallback model: `small` (default, fast) → `large-v3-turbo` (accurate but CPU-only = slow).
 - `asr.language` — empty = auto-detect per utterance; set `"it"`, `"en"` or `"es"` to force one (useful for short phrases, where Italian and Spanish can be confused).
 - `hotkey.key` — `alt_r` default. (`fn` like Wispr needs a native event tap — not possible from Python; roadmap.)
 - `dictionary.terms` — names/jargon Whisper should get right (biases the model, like Wispr's personal dictionary).

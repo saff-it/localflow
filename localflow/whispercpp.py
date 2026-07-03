@@ -80,8 +80,7 @@ class WhisperCppTranscriber:
             "-l", self.language,
             "--no-prints",
             "--no-timestamps",
-            "-fa", "1",  # flash attention: free speedup on Metal
-        ]
+        ]  # flash attention is on by default in current whisper.cpp
         if self.initial_prompt:
             cmd += ["--prompt", self.initial_prompt]
         try:
@@ -116,7 +115,7 @@ class WhisperCppServer:
             self.port = probe.getsockname()[1]
         self._proc = subprocess.Popen(
             [binary, "-m", str(model_path), "--host", "127.0.0.1", "--port", str(self.port),
-             "-l", self.language, "-fa", "1"],
+             "-l", self.language],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
