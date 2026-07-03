@@ -63,24 +63,17 @@ ollama pull llama3.2:3b
 
 LocalFlow auto-detects Ollama at startup. With it on, transcripts get filler removal, self-correction handling ("...anzi, facciamo giovedì" keeps only giovedì), punctuation, and app-aware tone (the LLM is told which app you're pasting into). Without it, you get raw Whisper output — which already punctuates decently. Change `format.ollama_model` to any model you've pulled.
 
-## Start at login (optional)
+## Start at login (optional — do this AFTER the terminal flow works)
 
-Save as `~/Library/LaunchAgents/com.localflow.plist` (adjust the path), then `launchctl load` it:
+A ready-to-use agent lives at `~/Library/LaunchAgents/com.localflow.plist` (copy in [deploy/com.localflow.plist](deploy/com.localflow.plist)). It is inert until loaded:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.localflow</string>
-  <key>ProgramArguments</key><array>
-    <string>/Users/simone/Documents/progetti-siti/localflow/.venv/bin/python</string>
-    <string>-m</string><string>localflow</string>
-  </array>
-  <key>WorkingDirectory</key><string>/Users/simone/Documents/progetti-siti/localflow</string>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-</dict></plist>
+```bash
+launchctl load ~/Library/LaunchAgents/com.localflow.plist    # activate now + at every login
+launchctl unload ~/Library/LaunchAgents/com.localflow.plist  # deactivate
+tail -f ~/.localflow/localflow.log                           # watch it (no terminal window when run this way)
 ```
+
+Important: launchd runs LocalFlow as its own process, so macOS asks for **new permission grants** attributed to the Python binary (`.venv/bin/python`) instead of your terminal — approve the Microphone popup, and add/enable that binary under Accessibility and Input Monitoring if dictation stays silent. Errors land in `~/.localflow/localflow.err.log`.
 
 ## Troubleshooting
 
