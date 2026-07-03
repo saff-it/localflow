@@ -87,6 +87,9 @@ def main(argv=None):
     p_mic.add_argument("--seconds", type=int, default=4)
     p_mic.add_argument("--model", help="override the configured Whisper model")
 
+    p_dl = sub.add_parser("download", help="download a Whisper model (resumable + sha256-verified)")
+    p_dl.add_argument("model", help="tiny | base | small | medium | large-v3 | large-v3-turbo")
+
     sub.add_parser("setup", help="print the macOS permissions checklist")
 
     args = parser.parse_args(argv)
@@ -96,6 +99,10 @@ def main(argv=None):
         cmd_transcribe(args)
     elif args.cmd == "mic-test":
         cmd_mic_test(args)
+    elif args.cmd == "download":
+        from .download import download
+
+        download(args.model)
     elif args.cmd == "setup":
         cmd_setup(args)
 

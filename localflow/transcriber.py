@@ -2,6 +2,16 @@
 from typing import Optional, Tuple
 
 
+def resolve_model(name: str) -> str:
+    """Prefer a locally downloaded model dir (localflow download <name>) over the HF hub cache."""
+    from .download import model_dir
+
+    local = model_dir(name)
+    if (local / "model.bin").exists():
+        return str(local)
+    return name
+
+
 class Transcriber:
     def __init__(
         self,
@@ -12,7 +22,7 @@ class Transcriber:
     ):
         from faster_whisper import WhisperModel  # heavy import, keep it here
 
-        self._model = WhisperModel(model_name, device="cpu", compute_type=compute_type)
+        self._model = WhisperModel(resolve_model(model_name), device="cpu", compute_type=compute_type)
         self.language: Optional[str] = language or None
         self.initial_prompt: Optional[str] = initial_prompt or None
 

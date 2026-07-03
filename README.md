@@ -14,6 +14,12 @@ python3 -m venv .venv
 
 First run downloads the Whisper model once (to `~/.cache/huggingface`); after that it's 100% offline.
 
+On flaky connections the automatic download can stall — use the built-in resumable downloader instead (Range-resume, retries, sha256 verification; lands in `~/.localflow/models/`, which takes priority over the HF cache):
+
+```bash
+.venv/bin/python -m localflow download small          # or large-v3-turbo, etc.
+```
+
 ## macOS permissions (one-time)
 
 Grant to the app you run LocalFlow from (Terminal, iTerm, ...), then restart the terminal:
