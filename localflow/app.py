@@ -76,7 +76,10 @@ def main() -> None:
 
         def _process():
                 started = time.time()
-                text, lang = transcriber.transcribe(clip)
+                pieces = audio.split_on_silence(clip, cfg.sample_rate)
+                results = [transcriber.transcribe(piece) for piece in pieces]
+                text = textproc.join_chunks(t for t, _ in results)
+                lang = results[0][1]
                 asr_secs = time.time() - started
                 text = textproc.tidy(text)
                 if not text:

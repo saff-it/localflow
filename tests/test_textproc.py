@@ -17,6 +17,21 @@ class TidyTests(unittest.TestCase):
         self.assertEqual(textproc.tidy("   "), "")
 
 
+class JoinChunksTests(unittest.TestCase):
+    def test_continuation_gets_lowercased(self):
+        out = textproc.join_chunks(["la chiamata è alle 15,", "E che sia puntuale."])
+        self.assertEqual(out, "la chiamata è alle 15, e che sia puntuale.")
+
+    def test_sentence_end_keeps_capital(self):
+        out = textproc.join_chunks(["Prima frase.", "Seconda frase."])
+        self.assertEqual(out, "Prima frase. Seconda frase.")
+
+    def test_acronym_not_lowered(self):
+        # "IVA" starts with two capitals: not a spurious sentence-start, keep it.
+        out = textproc.join_chunks(["il totale,", "IVA esclusa"])
+        self.assertEqual(out, "il totale, IVA esclusa")
+
+
 class DictionaryTests(unittest.TestCase):
     def test_case_insensitive_replacement(self):
         out = textproc.apply_dictionary("parliamo di local mind oggi", {"local mind": "LocalMind"})

@@ -11,6 +11,34 @@ from typing import List, Optional
 import numpy as np
 
 
+def split_on_silence(clip: np.ndarray, sample_rate: int,
+                     max_seconds: float = 28.0, search_seconds: float = 8.0) -> List[np.ndarray]:
+    """Split a long clip at the quietest 200 ms found in the tail of each
+    ~28 s window, so Whisper's 30 s window seam always lands in a pause
+    instead of mid-word (the cause of garbled text on long dictations)."""
+    max_n = int(max_seconds * sample_rate)
+    if len(clip) <= max_n:
+        return [clip]
+    frame = int(0.2 * sample_rate)
+    hop = frame // 2
+    parts: List[np.ndarray] = []
+    start = 0
+    while len(clip) - start > max_n:
+        lo = max(start, start + max_n - int(search_seconds * sample_rate))
+        hi = start + max_n
+        segment = clip[lo:hi]
+        best_i, best_rms = 0, float("inf")
+        for i in range(0, len(segment) - frame, hop):
+            rms = float(np.sqrt(np.mean(segment[i:i + frame] ** 2)))
+            if rms < best_rms:
+                best_rms, best_i = rms, i
+        cut = lo + best_i + frame // 2
+        parts.append(clip[start:cut])
+        start = cut
+    parts.append(clip[start:])
+    return parts
+
+
 class Recorder:
     def __init__(self, sample_rate: int = 16000, device: Optional[str] = None):
         self.sample_rate = sample_rate
