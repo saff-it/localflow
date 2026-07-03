@@ -1,5 +1,7 @@
 """The dictation daemon: hold key -> record -> transcribe -> clean -> paste."""
+import signal
 import subprocess
+import sys
 import threading
 import time
 
@@ -23,6 +25,9 @@ def _glossary_prompt(cfg: config.Config) -> str:
 
 
 def main() -> None:
+    # pkill/launchd stop the daemon with SIGTERM: exit via sys.exit so atexit
+    # handlers run and the whisper-server child is terminated (no orphans).
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     cfg = config.load()
     print("LocalFlow — 100% local dictation, nothing leaves this Mac.")
     print("model=%s (%s)  hotkey=hold '%s'  config=%s" % (cfg.model, cfg.compute_type, cfg.hotkey, config.CONFIG_PATH))
@@ -30,6 +35,10 @@ def main() -> None:
     transcriber = create_transcriber(cfg, initial_prompt=_glossary_prompt(cfg), persistent=True)
     print("ASR engine: %s" % type(transcriber).__name__)
     recorder = audio.Recorder(cfg.sample_rate, cfg.device or None)
+    try:
+        recorder.ensure_open()  # open the mic once, up front (permission prompt included)
+    except Exception as exc:
+        print("⚠️  impossibile aprire il microfono: %s" % exc)
     use_llm = cfg.format_enabled and formatter.available(cfg.ollama_url)
     if use_llm:
         print("AI cleanup: on — %s via Ollama" % cfg.ollama_model)
@@ -44,12 +53,16 @@ def main() -> None:
 
     def on_start():
         _play(SOUND_START, cfg.sounds)
-        recorder.start()
+        try:
+            recorder.start()
+        except Exception as exc:  # a crash here would kill the hotkey listener
+            print("⚠️  microfono non disponibile: %s" % exc)
 
     def on_stop():
         clip = recorder.stop()
         duration = len(clip) / float(cfg.sample_rate)
         if duration < MIN_UTTERANCE_SECONDS:
+            print("(ignorato: %.2fs di audio — pressione troppo breve o mic muto)" % duration)
             return
         # Capture the destination app at key release, before any slow work.
         app_name = inject.frontmost_app() if (use_llm and cfg.app_aware_tone) else ""
