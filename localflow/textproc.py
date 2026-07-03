@@ -19,7 +19,9 @@ def join_chunks(texts) -> str:
         if not text:
             continue
         if joined and joined[-1] not in ".!?…":
-            if len(text) > 1 and text[0].isupper() and text[1].islower():
+            word = text.split()[0]
+            # lower a spurious sentence-start capital, but never break acronyms (IVA, PDF)
+            if word[0].isupper() and (len(word) == 1 or word[1:].islower()):
                 text = text[0].lower() + text[1:]
             joined += " " + text
         else:
