@@ -1,6 +1,7 @@
 """Configuration: ~/.localflow/config.toml, created with commented defaults on first run."""
 import dataclasses
 import pathlib
+import re
 from typing import Dict, List
 
 try:
@@ -73,6 +74,15 @@ class Config:
     paste: bool = True
     restore_clipboard: bool = True
     sounds: bool = True
+
+
+def set_key(key: str, raw_toml_value: str) -> None:
+    """Rewrite `key = value` in config.toml in place, keeping comments.
+    Works because the keys we touch (language, enabled) are unique in the template."""
+    text = CONFIG_PATH.read_text(encoding="utf-8")
+    pattern = re.compile(r"(?m)^(%s\s*=\s*)([^#\n]*)" % re.escape(key))
+    text = pattern.sub(lambda m: m.group(1) + raw_toml_value + " ", text, count=1)
+    CONFIG_PATH.write_text(text, encoding="utf-8")
 
 
 def load() -> Config:

@@ -1,4 +1,12 @@
 import argparse
+import os
+import subprocess
+import sys
+
+
+def _other_instances():
+    result = subprocess.run(["pgrep", "-f", "python.* -m localflow"], capture_output=True, text=True)
+    return [p for p in result.stdout.split() if p != str(os.getpid())]
 
 SETUP_TEXT = """\
 LocalFlow — macOS permissions checklist
@@ -24,9 +32,21 @@ Quick checks without permissions:
 
 
 def cmd_run(_args):
+    others = _other_instances()
+    if others:
+        sys.exit("LocalFlow è già in esecuzione (pid %s) — chiudi quella istanza prima." % ", ".join(others))
     from .app import main as run_daemon
 
     run_daemon()
+
+
+def cmd_ui(_args):
+    others = _other_instances()
+    if others:
+        sys.exit("LocalFlow è già in esecuzione (pid %s) — chiudi quella istanza prima." % ", ".join(others))
+    from .menubar import main as run_ui
+
+    run_ui()
 
 
 def cmd_transcribe(args):
@@ -79,7 +99,8 @@ def main(argv=None):
         description="Private, fully-local voice dictation (Wispr Flow style): hold a key, speak, release.",
     )
     sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("run", help="start the hold-to-talk dictation daemon (default)")
+    sub.add_parser("run", help="start the hold-to-talk dictation daemon in the terminal")
+    sub.add_parser("ui", help="start LocalFlow as a menu-bar app (default)")
 
     p_tr = sub.add_parser("transcribe", help="transcribe an audio file (pipeline test, no mic needed)")
     p_tr.add_argument("file")
@@ -98,7 +119,9 @@ def main(argv=None):
     sub.add_parser("setup", help="print the macOS permissions checklist")
 
     args = parser.parse_args(argv)
-    if args.cmd in (None, "run"):
+    if args.cmd is None or args.cmd == "ui":
+        cmd_ui(args)
+    elif args.cmd == "run":
         cmd_run(args)
     elif args.cmd == "transcribe":
         cmd_transcribe(args)

@@ -35,10 +35,11 @@ Grant to the app you run LocalFlow from (Terminal, iTerm, ...), then restart the
 ## Use
 
 ```bash
-.venv/bin/python -m localflow            # start the daemon
+.venv/bin/python -m localflow            # menu-bar app (🎤 icon) — the normal way
+.venv/bin/python -m localflow run        # same daemon, headless in the terminal
 ```
 
-Hold **right Option (⌥)**, speak, release. Pop = recording, Glass = text pasted. The previous clipboard content is restored after pasting.
+Hold **right Option (⌥)**, speak, release. Pop = recording, Glass = text pasted. The previous clipboard content is restored after pasting. From the 🎤 menu you can switch language on the fly (Italiano/Auto/Español/English), toggle the AI polish, enable start-at-login, and open the config file. Dictations longer than ~28s are split at your quietest pause so Whisper's 30s window seam never garbles words.
 
 Other commands:
 
@@ -80,17 +81,21 @@ ollama pull llama3.2:3b
 
 LocalFlow auto-detects Ollama at startup. With it on, transcripts get filler removal, self-correction handling ("...anzi, facciamo giovedì" keeps only giovedì), punctuation, and app-aware tone (the LLM is told which app you're pasting into). Without it, you get raw Whisper output — which already punctuates decently. Change `format.ollama_model` to any model you've pulled.
 
-## Start at login (optional — do this AFTER the terminal flow works)
+## Start at login (optional)
 
-A ready-to-use agent lives at `~/Library/LaunchAgents/com.localflow.plist` (copy in [deploy/com.localflow.plist](deploy/com.localflow.plist)). It is inert until loaded:
+Toggle **"Avvia al login"** from the 🎤 menu (the LaunchAgent at `~/Library/LaunchAgents/com.localflow.plist` is written by `install.sh`). Logs land in `~/.localflow/localflow.log` / `.err.log`.
+
+Important: launchd runs LocalFlow as its own process, so macOS asks for **new permission grants** attributed to the Python binary (`.venv/bin/python`) instead of your terminal — approve the Microphone popup, and add/enable that binary under Accessibility and Input Monitoring if dictation stays silent.
+
+## Install on another Mac
+
+Copy this folder (without `.venv/`) — zip, AirDrop, or a private git repo — then on the target Mac:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.localflow.plist    # activate now + at every login
-launchctl unload ~/Library/LaunchAgents/com.localflow.plist  # deactivate
-tail -f ~/.localflow/localflow.log                           # watch it (no terminal window when run this way)
+cd localflow && ./install.sh
 ```
 
-Important: launchd runs LocalFlow as its own process, so macOS asks for **new permission grants** attributed to the Python binary (`.venv/bin/python`) instead of your terminal — approve the Microphone popup, and add/enable that binary under Accessibility and Input Monitoring if dictation stays silent. Errors land in `~/.localflow/localflow.err.log`.
+The script installs whisper-cpp via Homebrew, builds the venv, downloads the model (resumable + sha256-verified) and prepares the LaunchAgent. Then grant the three permissions (`localflow setup` prints the checklist). Requirements on the target: Apple Silicon, Homebrew, Python 3.9+.
 
 ## Troubleshooting
 
