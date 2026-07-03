@@ -19,12 +19,14 @@ class Transcriber:
         compute_type: str = "int8",
         language: str = "",
         initial_prompt: str = "",
+        beam_size: int = 1,
     ):
         from faster_whisper import WhisperModel  # heavy import, keep it here
 
         self._model = WhisperModel(resolve_model(model_name), device="cpu", compute_type=compute_type)
         self.language: Optional[str] = language or None
         self.initial_prompt: Optional[str] = initial_prompt or None
+        self.beam_size = beam_size
 
     def transcribe(self, audio) -> Tuple[str, str]:
         """audio: numpy float32 mono @16 kHz, or a file path. Returns (text, language)."""
@@ -33,7 +35,7 @@ class Transcriber:
             language=self.language,
             vad_filter=True,
             initial_prompt=self.initial_prompt,
-            beam_size=5,
+            beam_size=self.beam_size,
         )
         text = " ".join(seg.text.strip() for seg in segments).strip()
         return text, (info.language or "")

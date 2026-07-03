@@ -28,6 +28,7 @@ device = ""            # "" = system default input device
 model = "small"        # tiny | base | small | medium | large-v3 | large-v3-turbo (best quality, ~1.5 GB)
 language = ""          # "" = auto-detect per utterance; or force "it", "en", ...
 compute_type = "int8"
+beam_size = 1          # 1 = fastest (greedy); 5 = slower, slightly more accurate
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
@@ -58,6 +59,7 @@ class Config:
     model: str = "small"
     language: str = ""
     compute_type: str = "int8"
+    beam_size: int = 1
     format_enabled: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
@@ -87,6 +89,7 @@ def load() -> Config:
     cfg.model = asr.get("model", cfg.model)
     cfg.language = asr.get("language", cfg.language)
     cfg.compute_type = asr.get("compute_type", cfg.compute_type)
+    cfg.beam_size = int(asr.get("beam_size", cfg.beam_size))
 
     fmt = data.get("format", {})
     cfg.format_enabled = bool(fmt.get("enabled", cfg.format_enabled))

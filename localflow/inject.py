@@ -28,10 +28,19 @@ def frontmost_app() -> str:
     return result.stdout.strip()
 
 
-def paste_into_frontmost(text: str, restore_clipboard: bool = True) -> None:
+def paste_into_frontmost(text: str, restore_clipboard: bool = True) -> bool:
     previous: Optional[str] = get_clipboard() if restore_clipboard else None
     set_clipboard(text)
-    subprocess.run(["osascript", "-e", _PASTE_SCRIPT], capture_output=True)
+    result = subprocess.run(["osascript", "-e", _PASTE_SCRIPT], capture_output=True, text=True)
+    if result.returncode != 0:
+        # Paste blocked — almost always a missing Accessibility grant. Keep the text
+        # in the clipboard (skip the restore) so the dictation isn't lost.
+        print("⚠️  Incolla automatico FALLITO: manca il permesso Accessibilità per questa app.")
+        print("    Il testo dettato è negli appunti — premi Cmd+V per incollarlo tu.")
+        if result.stderr.strip():
+            print("    Dettaglio macOS: " + result.stderr.strip().splitlines()[-1])
+        return False
     if previous is not None:
         time.sleep(0.5)  # let the paste land before the old clipboard comes back
         set_clipboard(previous)
+    return True

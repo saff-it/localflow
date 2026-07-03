@@ -38,6 +38,18 @@ def available(url: str, timeout: float = 0.6) -> bool:
         return False
 
 
+def warmup(url: str, model: str) -> None:
+    """Load the model into memory ahead of the first dictation (empty generate = load only)."""
+    try:
+        requests.post(
+            url + "/api/generate",
+            json={"model": model, "prompt": "", "keep_alive": "30m"},
+            timeout=120,
+        )
+    except requests.RequestException:
+        pass
+
+
 def cleanup(text: str, url: str, model: str, app_name: str = "", timeout: float = 30.0) -> str:
     system = SYSTEM_PROMPT
     if app_name:
@@ -51,6 +63,7 @@ def cleanup(text: str, url: str, model: str, app_name: str = "", timeout: float 
                 + FEW_SHOT
                 + [{"role": "user", "content": text}],
                 "stream": False,
+                "keep_alive": "30m",  # don't unload between dictations (default is 5m)
                 "options": {"temperature": 0},
             },
             timeout=timeout,
