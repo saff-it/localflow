@@ -70,7 +70,10 @@ def main() -> None:
                     return
                 llm_started = time.time()
                 if use_llm:
+                    raw_text = text
                     text = formatter.cleanup(text, cfg.ollama_url, cfg.ollama_model, app_name)
+                    if text != raw_text:
+                        print("  (grezzo: %s)" % raw_text)
                 llm_secs = time.time() - llm_started
                 text = textproc.apply_dictionary(text, cfg.replacements)
                 if cfg.paste:
