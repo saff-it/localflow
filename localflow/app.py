@@ -4,7 +4,7 @@ import threading
 import time
 
 from . import audio, config, formatter, hotkey, inject, textproc
-from .transcriber import Transcriber
+from .transcriber import create_transcriber
 
 SOUND_START = "/System/Library/Sounds/Pop.aiff"
 SOUND_DONE = "/System/Library/Sounds/Glass.aiff"
@@ -27,7 +27,8 @@ def main() -> None:
     print("LocalFlow — 100% local dictation, nothing leaves this Mac.")
     print("model=%s (%s)  hotkey=hold '%s'  config=%s" % (cfg.model, cfg.compute_type, cfg.hotkey, config.CONFIG_PATH))
     print("Loading Whisper model (first run downloads it)...")
-    transcriber = Transcriber(cfg.model, cfg.compute_type, cfg.language, _glossary_prompt(cfg), cfg.beam_size)
+    transcriber = create_transcriber(cfg, initial_prompt=_glossary_prompt(cfg), persistent=True)
+    print("ASR engine: %s" % type(transcriber).__name__)
     recorder = audio.Recorder(cfg.sample_rate, cfg.device or None)
     use_llm = cfg.format_enabled and formatter.available(cfg.ollama_url)
     if use_llm:
@@ -55,6 +56,12 @@ def main() -> None:
 
         def work():
             with busy:
+                try:
+                    _process()
+                except Exception as exc:  # never die silently in a worker thread
+                    print("⚠️  errore dettatura: %s" % exc)
+
+        def _process():
                 started = time.time()
                 text, lang = transcriber.transcribe(clip)
                 asr_secs = time.time() - started

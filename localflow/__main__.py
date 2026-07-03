@@ -32,12 +32,14 @@ def cmd_run(_args):
 def cmd_transcribe(args):
     from . import config, formatter, textproc
     from .app import _glossary_prompt
-    from .transcriber import Transcriber
+    from .transcriber import Transcriber, create_transcriber
 
     cfg = config.load()
-    model = args.model or cfg.model
     language = args.language if args.language is not None else cfg.language
-    transcriber = Transcriber(model, cfg.compute_type, language, _glossary_prompt(cfg))
+    if args.model:  # explicit --model forces the faster-whisper engine with that model
+        transcriber = Transcriber(args.model, cfg.compute_type, language, _glossary_prompt(cfg), cfg.beam_size)
+    else:
+        transcriber = create_transcriber(cfg, language=language, initial_prompt=_glossary_prompt(cfg))
     text, lang = transcriber.transcribe(args.file)
     text = textproc.tidy(text)
     if args.format:
@@ -51,10 +53,13 @@ def cmd_mic_test(args):
 
     from . import config, textproc
     from .audio import Recorder
-    from .transcriber import Transcriber
+    from .transcriber import Transcriber, create_transcriber
 
     cfg = config.load()
-    transcriber = Transcriber(args.model or cfg.model, cfg.compute_type, cfg.language)
+    if args.model:
+        transcriber = Transcriber(args.model, cfg.compute_type, cfg.language, "", cfg.beam_size)
+    else:
+        transcriber = create_transcriber(cfg)
     recorder = Recorder(cfg.sample_rate, cfg.device or None)
     print("Recording %ds — speak now..." % args.seconds)
     recorder.start()

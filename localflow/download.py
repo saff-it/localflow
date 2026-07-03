@@ -25,6 +25,10 @@ REPOS = {
     "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
 }
 SKIP_FILES = {".gitattributes", "README.md"}
+
+# Single-file ggml models for whisper.cpp, from the official ggerganov repo.
+# Requested as "ggml:<name>", e.g. `localflow download ggml:large-v3-turbo-q5_0`.
+GGML_REPO = "ggerganov/whisper.cpp"
 PROGRESS_EVERY = 25 * 1024 * 1024  # print every 25 MB
 
 
@@ -75,38 +79,55 @@ def _sha256(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
-def download(name: str) -> pathlib.Path:
-    repo = REPOS.get(name)
-    if repo is None:
-        raise SystemExit("Unknown model '%s'. Choose from: %s" % (name, ", ".join(sorted(REPOS))))
-    target = model_dir(name)
-    target.mkdir(parents=True, exist_ok=True)
-
+def _siblings(repo: str):
     api_url = "https://huggingface.co/api/models/%s?blobs=true" % repo
     with urllib.request.urlopen(api_url, timeout=15) as response:
-        siblings = json.load(response)["siblings"]
+        return json.load(response)["siblings"]
 
-    for meta in siblings:
+
+def _download_verified(url: str, dest: pathlib.Path, meta: dict) -> None:
+    lfs = meta.get("lfs") or {}
+    expected_size = meta.get("size") or lfs.get("size")
+    expected_sha = lfs.get("oid")
+    for round_ in ("resume", "fresh"):
+        print("%s (%s)" % (dest.name, round_), flush=True)
+        _fetch_with_retry(url, dest)
+        size_ok = expected_size is None or dest.stat().st_size == expected_size
+        sha_ok = expected_sha is None or _sha256(dest) == expected_sha
+        if size_ok and sha_ok:
+            return
+        print("  verifica fallita (size_ok=%s sha_ok=%s) — riscarico da zero" % (size_ok, sha_ok), flush=True)
+        dest.unlink(missing_ok=True)
+    raise SystemExit("verification failed twice for " + dest.name)
+
+
+def _download_ggml(short_name: str) -> pathlib.Path:
+    fname = "ggml-" + short_name + ".bin"
+    meta = next((s for s in _siblings(GGML_REPO) if s["rfilename"] == fname), None)
+    if meta is None:
+        raise SystemExit("No '%s' in %s — check the name (e.g. large-v3-turbo-q5_0)" % (fname, GGML_REPO))
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = MODELS_DIR / fname
+    _download_verified("https://huggingface.co/%s/resolve/main/%s" % (GGML_REPO, fname), dest, meta)
+    print("OK -> %s" % dest, flush=True)
+    return dest
+
+
+def download(name: str) -> pathlib.Path:
+    if name.startswith("ggml:"):
+        return _download_ggml(name[len("ggml:"):])
+    repo = REPOS.get(name)
+    if repo is None:
+        raise SystemExit(
+            "Unknown model '%s'. Choose from: %s — or ggml:<name> for whisper.cpp"
+            % (name, ", ".join(sorted(REPOS)))
+        )
+    target = model_dir(name)
+    target.mkdir(parents=True, exist_ok=True)
+    for meta in _siblings(repo):
         fname = meta["rfilename"]
         if fname in SKIP_FILES:
             continue
-        lfs = meta.get("lfs") or {}
-        expected_size = meta.get("size") or lfs.get("size")
-        expected_sha = lfs.get("oid")
-        dest = target / fname
-        url = "https://huggingface.co/%s/resolve/main/%s" % (repo, fname)
-
-        for round_ in ("resume", "fresh"):
-            print("%s (%s)" % (fname, round_), flush=True)
-            _fetch_with_retry(url, dest)
-            size_ok = expected_size is None or dest.stat().st_size == expected_size
-            sha_ok = expected_sha is None or _sha256(dest) == expected_sha
-            if size_ok and sha_ok:
-                break
-            print("  verifica fallita (size_ok=%s sha_ok=%s) — riscarico da zero" % (size_ok, sha_ok), flush=True)
-            dest.unlink(missing_ok=True)
-        else:
-            raise SystemExit("verification failed twice for " + fname)
-
+        _download_verified("https://huggingface.co/%s/resolve/main/%s" % (repo, fname), target / fname, meta)
     print("OK -> %s" % target, flush=True)
     return target

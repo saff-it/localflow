@@ -2,6 +2,24 @@
 from typing import Optional, Tuple
 
 
+def create_transcriber(cfg, model: Optional[str] = None, language: Optional[str] = None,
+                       initial_prompt: str = "", persistent: bool = False):
+    """Pick the best available engine: whisper.cpp (Metal GPU) when binary+model
+    are present, faster-whisper (CPU) otherwise. cfg.engine can force either.
+    persistent=True (the daemon) keeps the model resident via whisper-server;
+    one-shot CLI calls use whisper-cli instead."""
+    from . import whispercpp
+
+    lang = cfg.language if language is None else language
+    want_cpp = cfg.engine in ("auto", "whispercpp")
+    if want_cpp and whispercpp.find_binary() and whispercpp.ggml_model_path(cfg.whispercpp_model).exists():
+        cls = whispercpp.WhisperCppServer if persistent else whispercpp.WhisperCppTranscriber
+        return cls(cfg.whispercpp_model, lang, initial_prompt)
+    if cfg.engine == "whispercpp":
+        raise RuntimeError("engine=whispercpp but whisper-cli or the ggml model is missing")
+    return Transcriber(model or cfg.model, cfg.compute_type, lang, initial_prompt, cfg.beam_size)
+
+
 def resolve_model(name: str) -> str:
     """Prefer a locally downloaded model dir (localflow download <name>) over the HF hub cache."""
     from .download import model_dir

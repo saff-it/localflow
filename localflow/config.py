@@ -25,7 +25,9 @@ sample_rate = 16000
 device = ""            # "" = system default input device
 
 [asr]
-model = "small"        # tiny | base | small | medium | large-v3 | large-v3-turbo (best quality, ~1.5 GB)
+engine = "auto"        # auto = whisper.cpp (Metal GPU) if available, else faster-whisper (CPU)
+whispercpp_model = "large-v3-turbo-q5_0"  # ggml model for whisper.cpp (localflow download ggml:<name>)
+model = "small"        # faster-whisper fallback: tiny | base | small | medium | large-v3 | large-v3-turbo
 language = ""          # "" = auto-detect per utterance; or force "it", "en", ...
 compute_type = "int8"
 beam_size = 1          # 1 = fastest (greedy); 5 = slower, slightly more accurate
@@ -60,6 +62,8 @@ class Config:
     language: str = ""
     compute_type: str = "int8"
     beam_size: int = 1
+    engine: str = "auto"
+    whispercpp_model: str = "large-v3-turbo-q5_0"
     format_enabled: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
@@ -90,6 +94,8 @@ def load() -> Config:
     cfg.language = asr.get("language", cfg.language)
     cfg.compute_type = asr.get("compute_type", cfg.compute_type)
     cfg.beam_size = int(asr.get("beam_size", cfg.beam_size))
+    cfg.engine = asr.get("engine", cfg.engine)
+    cfg.whispercpp_model = asr.get("whispercpp_model", cfg.whispercpp_model)
 
     fmt = data.get("format", {})
     cfg.format_enabled = bool(fmt.get("enabled", cfg.format_enabled))
