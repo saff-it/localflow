@@ -35,7 +35,7 @@ class LocalFlowMenuApp(rumps.App):
             item.state = 1 if cfg.language == code else 0
             self.lang_items[code] = item
             lang_menu.add(item)
-        self.pause_item = rumps.MenuItem("Sospendi (spegne il microfono)", callback=self._toggle_pause)
+        self.pause_item = rumps.MenuItem("🔴 Spegni microfono", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
@@ -95,10 +95,10 @@ class LocalFlowMenuApp(rumps.App):
             return
         if self.daemon.status == "in pausa":
             self.daemon.resume()
-            item.title = "Sospendi (spegne il microfono)"
+            item.title = "🔴 Spegni microfono"
         else:
             self.daemon.pause()
-            item.title = "Riprendi l'ascolto"
+            item.title = "🟢 Accendi microfono"
 
     def _toggle_polish(self, item):
         if self.daemon is None:

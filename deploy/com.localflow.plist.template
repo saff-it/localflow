@@ -14,5 +14,8 @@
     <key>PYTHONUNBUFFERED</key><string>1</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><false/>
+  <key>KeepAlive</key><dict>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+  <key>ThrottleInterval</key><integer>10</integer>
 </dict></plist>
