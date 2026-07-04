@@ -81,21 +81,33 @@ class Recorder:
             import time
 
             interval = 1 if self.idle_stop_seconds <= 10 else 5
+            close_after = max(60.0, self.idle_stop_seconds)
             while True:
                 time.sleep(interval)
-                if self._collecting or time.monotonic() - self._last_activity <= self.idle_stop_seconds:
+                if self._collecting:
+                    continue
+                idle = time.monotonic() - self._last_activity
+                if idle <= self.idle_stop_seconds:
                     continue
                 with self._audio_lock:
                     stream = self._stream
-                    if stream is not None and not getattr(stream, "closed", False) and stream.active:
+                    if stream is None or getattr(stream, "closed", False):
+                        continue
+                    try:
+                        if stream.active:
+                            stream.stop()  # stage 1: orange dot off, instant resume
+                        elif idle > close_after:
+                            # stage 2: release the device — a stopped-but-open stream
+                            # still holds coreaudiod's PreventUserIdleSystemSleep
+                            # assertion and quietly drains the battery.
+                            stream.close()
+                            self._stream = None
+                    except Exception:
                         try:
-                            stream.stop()  # suspend IO: orange dot off, device stays open
+                            stream.close()
                         except Exception:
-                            try:
-                                stream.close()
-                            except Exception:
-                                pass
-                            self._stream = None  # will be reopened on next start()
+                            pass
+                        self._stream = None  # reopened on next start()
 
         threading.Thread(target=watch, daemon=True).start()
 
