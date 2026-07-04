@@ -67,6 +67,19 @@ class LocalFlowDaemon:
                 old.close()
             self.status = "pronto"
 
+    def pause(self) -> None:
+        """Stop listening AND release the microphone (orange dot goes away)."""
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
+        self.recorder.close()
+        self.status = "in pausa"
+
+    def resume(self) -> None:
+        self.recorder.ensure_open()
+        self.start_listener()
+        self.status = "pronto"
+
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
         self.cfg.format_enabled = enabled

@@ -35,12 +35,13 @@ class LocalFlowMenuApp(rumps.App):
             item.state = 1 if cfg.language == code else 0
             self.lang_items[code] = item
             lang_menu.add(item)
+        self.pause_item = rumps.MenuItem("Sospendi (spegne il microfono)", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
-        self.menu = [self.status_item, None, lang_menu, self.polish_item, None, self.login_item, open_cfg, None]
+        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.polish_item, None, self.login_item, open_cfg, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -55,7 +56,7 @@ class LocalFlowMenuApp(rumps.App):
         if self.daemon is None:
             return
         state = self.daemon.status
-        icons = {"pronto": "🎤", "trascrivo...": "✍️"}
+        icons = {"pronto": "🎤", "trascrivo...": "✍️", "in pausa": "💤"}
         self.title = icons.get(state, "⏳")
         self.status_item.title = "Stato: %s  (tieni premuto ⌥ destro)" % state
 
@@ -67,6 +68,16 @@ class LocalFlowMenuApp(rumps.App):
                 item.state = 1 if c == code else 0
             threading.Thread(target=self.daemon.set_language, args=(code,), daemon=True).start()
         return cb
+
+    def _toggle_pause(self, item):
+        if self.daemon is None:
+            return
+        if self.daemon.status == "in pausa":
+            self.daemon.resume()
+            item.title = "Sospendi (spegne il microfono)"
+        else:
+            self.daemon.pause()
+            item.title = "Riprendi l'ascolto"
 
     def _toggle_polish(self, item):
         if self.daemon is None:

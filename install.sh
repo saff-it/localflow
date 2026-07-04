@@ -6,6 +6,13 @@ cd "$(dirname "$0")"
 
 echo "== LocalFlow: installazione =="
 
+case "$(pwd)" in
+  "$HOME/Documents/"*|"$HOME/Desktop/"*|"$HOME/Downloads/"*)
+    echo "⚠️  Questa cartella è protetta da macOS: l'avvio automatico non funzionerebbe."
+    echo "    Spostala prima, es.:  mv \"$(pwd)\" ~/Applications/LocalFlow  — poi rilancia."
+    exit 1;;
+esac
+
 command -v brew >/dev/null || { echo "Serve Homebrew: installa da https://brew.sh e rilancia."; exit 1; }
 
 echo "-- motore ASR (whisper.cpp, GPU Metal)"
@@ -22,6 +29,10 @@ echo "-- modello di trascrizione (download con ripresa + verifica sha256)"
 echo "-- avvio al login (LaunchAgent, inattivo finché non lo abiliti dal menu)"
 PLIST="$HOME/Library/LaunchAgents/com.localflow.plist"
 sed -e "s#__ROOT__#$(pwd)#g" -e "s#__HOME__#$HOME#g" deploy/com.localflow.plist.template > "$PLIST"
+
+echo "-- app di avvio rapido (Spotlight: 'Avvia LocalFlow')"
+osacompile -o "$HOME/Applications/Avvia LocalFlow.app" -e \
+  'do shell script "launchctl kickstart gui/$(id -u)/com.localflow 2>/dev/null || launchctl load ~/Library/LaunchAgents/com.localflow.plist"' 2>/dev/null || true
 
 echo
 echo "== Fatto! Prossimi passi =="
