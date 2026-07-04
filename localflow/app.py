@@ -15,6 +15,7 @@ from .transcriber import create_transcriber
 
 SOUND_START = "/System/Library/Sounds/Pop.aiff"
 SOUND_DONE = "/System/Library/Sounds/Glass.aiff"
+SOUND_COPY = "/System/Library/Sounds/Tink.aiff"
 
 MIN_UTTERANCE_SECONDS = 0.3  # shorter than this = accidental tap, skip (also kills silence hallucinations)
 
@@ -135,7 +136,8 @@ class LocalFlowDaemon:
 
     # -- dictation pipeline ----------------------------------------------------
 
-    def _on_start(self):
+    def _on_start(self, copy_mode=False):
+        self._copy_mode = copy_mode
         _play(SOUND_START, self.cfg.sounds)
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
@@ -155,12 +157,14 @@ class LocalFlowDaemon:
                 threading.Thread(target=self.recorder.reopen, daemon=True).start()
             return
 
+        copy_mode = getattr(self, "_copy_mode", False)
+
         def work():
             app_name = inject.frontmost_app()  # where the user was at key release
             with self._busy:
                 self.status = "trascrivo..."
                 try:
-                    self._process(clip, duration, app_name)
+                    self._process(clip, duration, app_name, copy_mode)
                 except Exception as exc:  # never die silently in a worker thread
                     print("⚠️  errore dettatura: %s" % exc)
                 finally:
@@ -183,7 +187,7 @@ class LocalFlowDaemon:
         except Exception:
             pass  # debugging aid must never break dictation
 
-    def _process(self, clip, duration, app_name):
+    def _process(self, clip, duration, app_name, copy_mode=False):
         cfg = self.cfg
         if cfg.debug_keep_audio:
             self._save_debug_clip(clip)
@@ -207,6 +211,11 @@ class LocalFlowDaemon:
             text = formatter.punctuate(text, cfg.ollama_url, cfg.ollama_model)
         llm_secs = time.time() - llm_started
         text = textproc.apply_dictionary(text, cfg.replacements)
+        if copy_mode:  # copy hotkey: clipboard only, paste it wherever you like
+            inject.set_clipboard(text)
+            _play(SOUND_COPY, cfg.sounds)
+            print("[%4.1fs audio | asr %.1fs | %s] (negli appunti) %s" % (duration, asr_secs, lang, text))
+            return
         if cfg.paste:
             # Slow processing + user moved on: never paste blind into another app.
             if time.time() - started > 5 and app_name:
@@ -230,11 +239,25 @@ class LocalFlowDaemon:
     # -- lifecycle ---------------------------------------------------------------
 
     def start_listener(self) -> None:
+        from functools import partial
+
         from pynput import keyboard
 
-        key = hotkey.parse_key(self.cfg.hotkey)
-        holder = hotkey.HoldToTalk(key, self._on_start, self._on_stop)
-        self._listener = keyboard.Listener(on_press=holder._on_press, on_release=holder._on_release)
+        holders = [hotkey.HoldToTalk(hotkey.parse_key(self.cfg.hotkey),
+                                     partial(self._on_start, False), self._on_stop)]
+        if self.cfg.copy_hotkey and self.cfg.copy_hotkey != self.cfg.hotkey:
+            holders.append(hotkey.HoldToTalk(hotkey.parse_key(self.cfg.copy_hotkey),
+                                             partial(self._on_start, True), self._on_stop))
+
+        def on_press(key):
+            for holder in holders:
+                holder._on_press(key)
+
+        def on_release(key):
+            for holder in holders:
+                holder._on_release(key)
+
+        self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)
         self._listener.start()
 
     def shutdown(self) -> None:

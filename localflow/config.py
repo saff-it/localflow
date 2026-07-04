@@ -20,6 +20,7 @@ DEFAULT_CONFIG = """\
 # Options: alt_r (right Option), alt_l, cmd_r, ctrl_r, ctrl_l, f13 ... or a single character.
 # The fn key cannot be captured from Python — that one needs a native event tap (see roadmap).
 key = "alt_r"
+copy_key = ""          # secondo tasto: detta e COPIA negli appunti senza incollare ("" = disattivato)
 
 [audio]
 sample_rate = 16000
@@ -60,6 +61,7 @@ sounds = true            # feedback sounds on record start / text ready
 @dataclasses.dataclass
 class Config:
     hotkey: str = "alt_r"
+    copy_hotkey: str = ""
     sample_rate: int = 16000
     device: str = ""
     mic_release_seconds: float = 300.0
@@ -100,6 +102,7 @@ def load() -> Config:
 
     hk = data.get("hotkey", {})
     cfg.hotkey = hk.get("key", cfg.hotkey)
+    cfg.copy_hotkey = hk.get("copy_key", cfg.copy_hotkey)
 
     au = data.get("audio", {})
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))
