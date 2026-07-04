@@ -25,6 +25,7 @@ key = "alt_r"
 sample_rate = 16000
 device = ""            # "" = system default input device
 mic_release_seconds = 15  # release the mic (orange dot off) after N idle seconds; 0 = keep always on
+debug_keep_audio = true   # keep the last 5 dictation clips in ~/.localflow/debug (local only) for tuning
 
 [asr]
 engine = "auto"        # auto = whisper.cpp (Metal GPU) if available, else faster-whisper (CPU)
@@ -62,6 +63,7 @@ class Config:
     sample_rate: int = 16000
     device: str = ""
     mic_release_seconds: float = 15.0
+    debug_keep_audio: bool = True
     model: str = "small"
     language: str = ""
     compute_type: str = "int8"
@@ -103,6 +105,7 @@ def load() -> Config:
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))
     cfg.device = au.get("device", cfg.device)
     cfg.mic_release_seconds = float(au.get("mic_release_seconds", cfg.mic_release_seconds))
+    cfg.debug_keep_audio = bool(au.get("debug_keep_audio", cfg.debug_keep_audio))
 
     asr = data.get("asr", {})
     cfg.model = asr.get("model", cfg.model)

@@ -139,8 +139,25 @@ class LocalFlowDaemon:
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _save_debug_clip(self, clip):
+        """Ring buffer of the last dictations (local only): real-voice evidence
+        for tuning ASR configs when something mis-transcribes."""
+        try:
+            from .whispercpp import write_wav
+
+            debug_dir = config.CONFIG_DIR / "debug"
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            write_wav(clip, self.cfg.sample_rate, str(debug_dir / ("clip-%d.wav" % int(time.time()))))
+            clips = sorted(debug_dir.glob("clip-*.wav"))
+            for old in clips[:-5]:
+                old.unlink()
+        except Exception:
+            pass  # debugging aid must never break dictation
+
     def _process(self, clip, duration, app_name):
         cfg = self.cfg
+        if cfg.debug_keep_audio:
+            self._save_debug_clip(clip)
         started = time.time()
         pieces = audio.split_on_silence(clip, cfg.sample_rate)
         results = [self.transcriber.transcribe(piece) for piece in pieces]
