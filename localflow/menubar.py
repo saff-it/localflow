@@ -67,6 +67,16 @@ class LocalFlowMenuApp(rumps.App):
     SYMBOLS = {"pronto": "mic", "trascrivo...": "waveform", "in pausa": "mic.slash"}
 
     def _refresh_status(self, _timer):
+        if not getattr(self, "_dock_hidden", False):
+            # Hide the Dock/Cmd-Tab "Python" entry. Must happen AFTER the app is
+            # fully launched (doing it at boot made rumps exit silently).
+            try:
+                from AppKit import NSApplication
+
+                NSApplication.sharedApplication().setActivationPolicy_(1)  # accessory
+                self._dock_hidden = True
+            except Exception:
+                self._dock_hidden = True  # don't retry forever
         if self.daemon is None:
             return
         state = self.daemon.status
@@ -156,12 +166,4 @@ class LocalFlowMenuApp(rumps.App):
 
 
 def main():
-    # Declare ourselves a menu-bar-only app (LSUIElement): no Dock icon,
-    # no Cmd-Tab entry, no phantom "Python" the user can't close.
-    try:
-        from AppKit import NSBundle
-
-        NSBundle.mainBundle().infoDictionary()["LSUIElement"] = "1"
-    except Exception:
-        pass
     LocalFlowMenuApp().run()
