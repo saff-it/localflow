@@ -125,6 +125,15 @@ class LocalFlowDaemon:
             self._listener = None
         self.start_listener()
 
+    def set_copy_hotkey(self, key_name: str) -> None:
+        """Persist + swap (or disable, "") the dictate-and-copy key at runtime."""
+        config.set_key("copy_key", '"%s"' % key_name)
+        self.cfg.copy_hotkey = key_name
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
+        self.start_listener()
+
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
         self.cfg.format_enabled = enabled

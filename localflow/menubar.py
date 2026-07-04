@@ -29,6 +29,7 @@ HOTKEYS = [
     ("⌃ Control destro", "ctrl_r"),
     ("F13", "f13"),
 ]
+COPY_HOTKEYS = [("Disattivato", "")] + HOTKEYS
 PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.localflow.plist"
 
 
@@ -62,6 +63,14 @@ class LocalFlowMenuApp(rumps.App):
             self.hotkey_items[code] = item
             hotkey_menu.add(item)
         self.hotkey_menu = hotkey_menu
+        self.copykey_items = {}
+        copykey_menu = rumps.MenuItem("Tasto di copia (solo appunti)")
+        for label, code in COPY_HOTKEYS:
+            item = rumps.MenuItem(label, callback=self._make_copykey_cb(code))
+            item.state = 1 if cfg.copy_hotkey == code else 0
+            self.copykey_items[code] = item
+            copykey_menu.add(item)
+        self.copykey_menu = copykey_menu
         self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
@@ -71,7 +80,7 @@ class LocalFlowMenuApp(rumps.App):
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.polish_item, None, recent, None, self.login_item, open_cfg, restart, None]
+                     self.copykey_menu, self.polish_item, None, recent, None, self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -137,6 +146,15 @@ class LocalFlowMenuApp(rumps.App):
             for c, item in self.hotkey_items.items():
                 item.state = 1 if c == code else 0
             threading.Thread(target=self.daemon.set_hotkey, args=(code,), daemon=True).start()
+        return cb
+
+    def _make_copykey_cb(self, code):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for c, item in self.copykey_items.items():
+                item.state = 1 if c == code else 0
+            threading.Thread(target=self.daemon.set_copy_hotkey, args=(code,), daemon=True).start()
         return cb
 
     def _make_model_cb(self, name):
