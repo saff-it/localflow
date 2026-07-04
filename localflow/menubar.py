@@ -18,6 +18,10 @@ LANGUAGES = [
     ("Español", "es"),
     ("English", "en"),
 ]
+MODELS = [
+    ("Massima precisione (~4-5s)", "large-v3-q5_0"),
+    ("Veloce (~1-2s)", "large-v3-turbo-q8_0"),
+]
 PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.localflow.plist"
 
 
@@ -35,13 +39,21 @@ class LocalFlowMenuApp(rumps.App):
             item.state = 1 if cfg.language == code else 0
             self.lang_items[code] = item
             lang_menu.add(item)
+        self.model_items = {}
+        model_menu = rumps.MenuItem("Precisione")
+        for label, name in MODELS:
+            item = rumps.MenuItem(label, callback=self._make_model_cb(name))
+            item.state = 1 if cfg.whispercpp_model == name else 0
+            self.model_items[name] = item
+            model_menu.add(item)
+        self.model_menu = model_menu
         self.pause_item = rumps.MenuItem("🔴 Spegni microfono", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
-        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.polish_item, None, self.login_item, open_cfg, None]
+        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.polish_item, None, self.login_item, open_cfg, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -88,6 +100,15 @@ class LocalFlowMenuApp(rumps.App):
             for c, item in self.lang_items.items():
                 item.state = 1 if c == code else 0
             threading.Thread(target=self.daemon.set_language, args=(code,), daemon=True).start()
+        return cb
+
+    def _make_model_cb(self, name):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for n, item in self.model_items.items():
+                item.state = 1 if n == name else 0
+            threading.Thread(target=self.daemon.set_model, args=(name,), daemon=True).start()
         return cb
 
     def _toggle_pause(self, item):

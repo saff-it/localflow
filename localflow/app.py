@@ -101,6 +101,20 @@ class LocalFlowDaemon:
         self.start_listener()
         self.status = "pronto"
 
+    def set_model(self, ggml_name: str) -> None:
+        """Persist + rebuild the ASR engine with another whisper.cpp model (precision/speed switch)."""
+        config.set_key("whispercpp_model", '"%s"' % ggml_name)
+        self.cfg.whispercpp_model = ggml_name
+        with self._busy:
+            self.status = "cambio modello..."
+            old = self.transcriber
+            self.transcriber = create_transcriber(
+                self.cfg, initial_prompt=_glossary_prompt(self.cfg), persistent=True
+            )
+            if hasattr(old, "close"):
+                old.close()
+            self.status = "pronto"
+
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
         self.cfg.format_enabled = enabled
