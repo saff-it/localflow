@@ -80,8 +80,9 @@ class Recorder:
         def watch():
             import time
 
+            interval = 1 if self.idle_stop_seconds <= 10 else 5
             while True:
-                time.sleep(5)
+                time.sleep(interval)
                 if self._collecting or time.monotonic() - self._last_activity <= self.idle_stop_seconds:
                     continue
                 with self._audio_lock:
