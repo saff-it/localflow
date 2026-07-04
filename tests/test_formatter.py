@@ -7,6 +7,10 @@ class NeedsPunctuationTests(unittest.TestCase):
     def test_short_text_never_triggers(self):
         self.assertFalse(needs_punctuation("ciao come va"))
 
+    def test_medium_sentence_not_worth_the_latency(self):
+        text = "e come vedi alcune parole me le ha tagliate dal testo che ti sto mandando adesso"
+        self.assertFalse(needs_punctuation(text))  # ~85 chars: rescue would cost more than it gives
+
     def test_long_flat_text_triggers(self):
         text = "vediamo mi sembra che stia funzionando molto meglio anche se questa frase " \
                "la sto dicendo velocissima senza respirare quindi mancano le pause del tutto"
@@ -36,6 +40,12 @@ class WordsMatchTests(unittest.TestCase):
 
     def test_dropped_word_is_rejected(self):
         self.assertFalse(_words_match("ciao marco come stai", "Ciao, come stai?"))
+
+    def test_merging_split_words_is_allowed(self):
+        self.assertTrue(_words_match(
+            "qual è lo step success ivo per arrivare al live llo giusto",
+            "Qual è lo step successivo per arrivare al livello giusto?",
+        ))
 
 
 if __name__ == "__main__":
