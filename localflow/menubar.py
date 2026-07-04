@@ -47,7 +47,7 @@ class LocalFlowMenuApp(rumps.App):
             self.model_items[name] = item
             model_menu.add(item)
         self.model_menu = model_menu
-        self.pause_item = rumps.MenuItem("🔴 Spegni microfono", callback=self._toggle_pause)
+        self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
@@ -114,12 +114,14 @@ class LocalFlowMenuApp(rumps.App):
     def _toggle_pause(self, item):
         if self.daemon is None:
             return
+        # Never run pause/resume on the UI thread: a wedged CoreAudio call in
+        # there froze the whole menu bar once. Background thread, always.
         if self.daemon.status == "in pausa":
-            self.daemon.resume()
-            item.title = "🔴 Spegni microfono"
+            item.title = "⏻ Spegni microfono"
+            threading.Thread(target=self.daemon.resume, daemon=True).start()
         else:
-            self.daemon.pause()
-            item.title = "🟢 Accendi microfono"
+            item.title = "⏻ Accendi microfono"
+            threading.Thread(target=self.daemon.pause, daemon=True).start()
 
     def _toggle_polish(self, item):
         if self.daemon is None:

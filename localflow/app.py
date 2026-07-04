@@ -139,9 +139,9 @@ class LocalFlowDaemon:
         if duration < MIN_UTTERANCE_SECONDS:
             print("(ignorato: %.2fs di audio — pressione troppo breve o mic muto)" % duration)
             return
-        app_name = inject.frontmost_app() if (self.use_llm and self.cfg.app_aware_tone) else ""
 
         def work():
+            app_name = inject.frontmost_app()  # where the user was at key release
             with self._busy:
                 self.status = "trascrivo..."
                 try:
@@ -193,6 +193,15 @@ class LocalFlowDaemon:
         llm_secs = time.time() - llm_started
         text = textproc.apply_dictionary(text, cfg.replacements)
         if cfg.paste:
+            # Slow processing + user moved on: never paste blind into another app.
+            if time.time() - started > 5 and app_name:
+                current = inject.frontmost_app()
+                if current and current != app_name:
+                    inject.set_clipboard(text)
+                    _play(SOUND_DONE, cfg.sounds)
+                    print("⚠️  finestra cambiata ('%s' → '%s'): testo negli appunti, premi Cmd+V dove serve." % (app_name, current))
+                    print("[%4.1fs audio | asr %.1fs + llm %.1fs | %s] %s" % (duration, asr_secs, llm_secs, lang, text))
+                    return
             # Consecutive dictations: add the space the previous paste didn't leave.
             if self._last_paste and time.time() - self._last_paste < 180 and not text[0].isspace():
                 text = " " + text

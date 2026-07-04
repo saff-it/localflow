@@ -77,7 +77,7 @@ def punctuate(text: str, url: str, model: str, timeout: float = 60.0) -> str:
                     {"role": "user", "content": text},
                 ],
                 "stream": False,
-                "keep_alive": "2h",
+                "keep_alive": "5m",
                 "options": {"temperature": 0},
             },
             timeout=timeout,
@@ -103,7 +103,7 @@ def warmup(url: str, model: str) -> None:
     try:
         requests.post(
             url + "/api/generate",
-            json={"model": model, "prompt": "", "keep_alive": "2h"},
+            json={"model": model, "prompt": "", "keep_alive": "5m"},
             timeout=120,
         )
     except requests.RequestException:
@@ -123,7 +123,7 @@ def cleanup(text: str, url: str, model: str, app_name: str = "", timeout: float 
                 + FEW_SHOT
                 + [{"role": "user", "content": text}],
                 "stream": False,
-                "keep_alive": "2h",  # don't unload between dictations (default is 5m)
+                "keep_alive": "5m",  # don't unload between dictations (default is 5m)
                 "options": {"temperature": 0},
             },
             timeout=timeout,

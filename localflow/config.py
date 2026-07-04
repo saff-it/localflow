@@ -24,7 +24,7 @@ key = "alt_r"
 [audio]
 sample_rate = 16000
 device = ""            # "" = system default input device
-mic_release_seconds = 15  # release the mic (orange dot off) after N idle seconds; 0 = keep always on
+mic_release_seconds = 0   # 0 = mic always ready (STABLE); >0 releases it when idle but can wedge CoreAudio
 debug_keep_audio = true   # keep the last 5 dictation clips in ~/.localflow/debug (local only) for tuning
 
 [asr]
@@ -37,7 +37,7 @@ beam_size = 5          # 5 = più accurato, gratis su GPU (whisper.cpp); con fal
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
-punctuate = true       # rescue pass on long unpunctuated dictations (word-for-word guaranteed by code)
+punctuate = false      # rescue pass on long unpunctuated dictations — costs ~5GB RAM parked for the LLM
 ollama_url = "http://127.0.0.1:11434"
 ollama_model = "llama3.2:3b"
 app_aware_tone = true  # tell the LLM which app the text is being pasted into
@@ -62,7 +62,7 @@ class Config:
     hotkey: str = "alt_r"
     sample_rate: int = 16000
     device: str = ""
-    mic_release_seconds: float = 15.0
+    mic_release_seconds: float = 0.0
     debug_keep_audio: bool = True
     model: str = "small"
     language: str = ""
@@ -71,7 +71,7 @@ class Config:
     engine: str = "auto"
     whispercpp_model: str = "large-v3-turbo-q8_0"
     format_enabled: bool = True
-    punctuate_enabled: bool = True
+    punctuate_enabled: bool = False
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
     app_aware_tone: bool = True
