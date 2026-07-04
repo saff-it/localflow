@@ -156,4 +156,12 @@ class LocalFlowMenuApp(rumps.App):
 
 
 def main():
+    # Declare ourselves a menu-bar-only app (LSUIElement): no Dock icon,
+    # no Cmd-Tab entry, no phantom "Python" the user can't close.
+    try:
+        from AppKit import NSBundle
+
+        NSBundle.mainBundle().infoDictionary()["LSUIElement"] = "1"
+    except Exception:
+        pass
     LocalFlowMenuApp().run()
