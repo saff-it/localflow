@@ -52,13 +52,34 @@ class LocalFlowMenuApp(rumps.App):
         except Exception as exc:
             rumps.notification("LocalFlow", "Errore di avvio", str(exc))
 
+    SYMBOLS = {"pronto": "mic", "trascrivo...": "waveform", "in pausa": "mic.slash"}
+
     def _refresh_status(self, _timer):
         if self.daemon is None:
             return
         state = self.daemon.status
-        icons = {"pronto": "🎤", "trascrivo...": "✍️", "in pausa": "💤"}
-        self.title = icons.get(state, "⏳")
+        self._set_symbol(self.SYMBOLS.get(state, "hourglass"), state)
         self.status_item.title = "Stato: %s  (tieni premuto ⌥ destro)" % state
+
+    def _set_symbol(self, name, state):
+        """Native SF Symbols in the status item — same style as the system icons.
+        Falls back to emoji title if the AppKit internals ever change."""
+        if getattr(self, "_current_symbol", None) == name:
+            return
+        try:
+            from AppKit import NSImage
+
+            image = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, "LocalFlow")
+            if image is None:
+                raise ValueError("unknown SF Symbol: " + name)
+            image.setTemplate_(True)
+            button = self._nsapp.nsstatusitem.button()
+            button.setImage_(image)
+            button.setTitle_("")
+            self._current_symbol = name
+        except Exception:
+            fallback = {"pronto": "🎤", "trascrivo...": "✍️", "in pausa": "💤"}
+            self.title = fallback.get(state, "⏳")
 
     def _make_lang_cb(self, code):
         def cb(_item):

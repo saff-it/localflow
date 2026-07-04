@@ -24,6 +24,7 @@ key = "alt_r"
 [audio]
 sample_rate = 16000
 device = ""            # "" = system default input device
+mic_release_seconds = 15  # release the mic (orange dot off) after N idle seconds; 0 = keep always on
 
 [asr]
 engine = "auto"        # auto = whisper.cpp (Metal GPU) if available, else faster-whisper (CPU)
@@ -59,6 +60,7 @@ class Config:
     hotkey: str = "alt_r"
     sample_rate: int = 16000
     device: str = ""
+    mic_release_seconds: float = 15.0
     model: str = "small"
     language: str = ""
     compute_type: str = "int8"
@@ -98,6 +100,7 @@ def load() -> Config:
     au = data.get("audio", {})
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))
     cfg.device = au.get("device", cfg.device)
+    cfg.mic_release_seconds = float(au.get("mic_release_seconds", cfg.mic_release_seconds))
 
     asr = data.get("asr", {})
     cfg.model = asr.get("model", cfg.model)

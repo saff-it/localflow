@@ -33,7 +33,7 @@ class LocalFlowDaemon:
     def __init__(self, cfg: config.Config):
         self.cfg = cfg
         self.status = "avvio..."
-        self.recorder = audio.Recorder(cfg.sample_rate, cfg.device or None)
+        self.recorder = audio.Recorder(cfg.sample_rate, cfg.device or None, cfg.mic_release_seconds)
         try:
             self.recorder.ensure_open()  # open the mic once, up front (permission prompt included)
         except Exception as exc:
