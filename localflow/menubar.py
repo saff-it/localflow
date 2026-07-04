@@ -3,6 +3,7 @@
 The heavy engine loads in a background thread so the icon appears instantly;
 a 1s timer mirrors the daemon status into the menu.
 """
+import os
 import pathlib
 import subprocess
 import threading
@@ -53,7 +54,10 @@ class LocalFlowMenuApp(rumps.App):
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
-        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.polish_item, None, self.login_item, open_cfg, None]
+        recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
+        restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
+        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.polish_item,
+                     None, recent, None, self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -163,6 +167,20 @@ class LocalFlowMenuApp(rumps.App):
 
     def _open_config(self, _item):
         subprocess.run(["open", str(config.CONFIG_PATH)])
+
+    def _show_recent(self, _item):
+        try:
+            log = pathlib.Path.home() / ".localflow" / "localflow.log"
+            texts = [line.split("] ", 1)[1].strip()
+                     for line in log.read_text(encoding="utf-8", errors="replace").splitlines()
+                     if line.startswith("[") and "] " in line]
+            rumps.alert("Ultime dettature", "\n\n".join(texts[-5:]) or "Nessuna dettatura nel log.")
+        except Exception as exc:
+            rumps.alert("LocalFlow", "Impossibile leggere il log: %s" % exc)
+
+    def _restart(self, _item):
+        # launchd receives the request and restarts us even though we die mid-call
+        subprocess.Popen(["launchctl", "kickstart", "-k", "gui/%d/com.localflow" % os.getuid()])
 
 
 def main():
