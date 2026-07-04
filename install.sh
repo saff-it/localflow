@@ -24,7 +24,20 @@ echo "-- ambiente Python"
 .venv/bin/pip install -q -r requirements.txt
 
 echo "-- modello di trascrizione (download con ripresa + verifica sha256)"
-.venv/bin/python -m localflow download ggml:large-v3-turbo-q5_0
+.venv/bin/python -m localflow download ggml:large-v3-turbo-q8_0
+
+echo "-- encoder CoreML per l'Apple Neural Engine (~600 MB; il primo avvio poi compila una tantum, ~1 min)"
+.venv/bin/python - <<'PY'
+import pathlib, subprocess
+from localflow.download import _fetch_with_retry
+models = pathlib.Path.home() / ".localflow" / "models"
+if not (models / "ggml-large-v3-turbo-encoder.mlmodelc").exists():
+    dest = models / "ggml-large-v3-turbo-encoder.mlmodelc.zip"
+    _fetch_with_retry(
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-encoder.mlmodelc.zip", dest)
+    subprocess.run(["unzip", "-q", "-o", str(dest)], cwd=models, check=True)
+print("encoder CoreML pronto")
+PY
 
 echo "-- avvio al login (LaunchAgent, inattivo finché non lo abiliti dal menu)"
 PLIST="$HOME/Library/LaunchAgents/com.localflow.plist"

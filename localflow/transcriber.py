@@ -14,7 +14,7 @@ def create_transcriber(cfg, model: Optional[str] = None, language: Optional[str]
     want_cpp = cfg.engine in ("auto", "whispercpp")
     if want_cpp and whispercpp.find_binary() and whispercpp.ggml_model_path(cfg.whispercpp_model).exists():
         cls = whispercpp.WhisperCppServer if persistent else whispercpp.WhisperCppTranscriber
-        return cls(cfg.whispercpp_model, lang, initial_prompt)
+        return cls(cfg.whispercpp_model, lang, initial_prompt, beam_size=cfg.beam_size)
     if cfg.engine == "whispercpp":
         raise RuntimeError("engine=whispercpp but whisper-cli or the ggml model is missing")
     return Transcriber(model or cfg.model, cfg.compute_type, lang, initial_prompt, cfg.beam_size)

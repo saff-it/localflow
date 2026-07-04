@@ -22,7 +22,13 @@ MODELS_DIR = pathlib.Path.home() / ".localflow" / "models"
 _LANG_RE = re.compile(r"auto-detected language: (\w+)")
 
 
+BIN_DIR = pathlib.Path(__file__).resolve().parent.parent / "bin"
+
+
 def find_binary(name: str = "whisper-cli") -> Optional[str]:
+    local = BIN_DIR / name  # our CoreML-enabled build wins over the brew one
+    if local.exists():
+        return str(local)
     found = shutil.which(name)
     if found:
         return found
@@ -60,6 +66,7 @@ class WhisperCppTranscriber:
         language: str = "",
         initial_prompt: str = "",
         binary: Optional[str] = None,
+        beam_size: int = 5,
     ):
         self.binary = binary or find_binary()
         if self.binary is None:
@@ -69,6 +76,7 @@ class WhisperCppTranscriber:
             raise RuntimeError("ggml model missing: %s (run: localflow download ggml:%s)" % (self.model_path, model_name))
         self.language = language or "auto"
         self.initial_prompt = initial_prompt
+        self.beam_size = beam_size
 
     def transcribe(self, audio, sample_rate: int = 16000) -> Tuple[str, str]:
         """audio: numpy float32 mono @16 kHz, or a path to an audio file."""
@@ -81,6 +89,8 @@ class WhisperCppTranscriber:
             "--no-prints",
             "--no-timestamps",
         ]  # flash attention is on by default in current whisper.cpp
+        if self.beam_size > 1:  # nearly free on GPU: turbo's decoder is tiny
+            cmd += ["-bs", str(self.beam_size)]
         if self.initial_prompt:
             cmd += ["--prompt", self.initial_prompt]
         try:
@@ -101,7 +111,7 @@ class WhisperCppServer:
     """Keeps the model resident on the GPU via whisper-server: per-utterance cost
     is pure inference instead of model reload (the whisper-cli tax, ~5s/call)."""
 
-    def __init__(self, model_name: str, language: str = "", initial_prompt: str = ""):
+    def __init__(self, model_name: str, language: str = "", initial_prompt: str = "", beam_size: int = 5):
         binary = find_binary("whisper-server")
         if binary is None:
             raise RuntimeError("whisper-server not found (brew install whisper-cpp)")
@@ -110,12 +120,13 @@ class WhisperCppServer:
             raise RuntimeError("ggml model missing: %s (run: localflow download ggml:%s)" % (model_path, model_name))
         self.language = language or "auto"
         self.initial_prompt = initial_prompt
+        extra = ["-bs", str(beam_size)] if beam_size > 1 else []
         with socket.socket() as probe:  # grab a free ephemeral port
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
         self._proc = subprocess.Popen(
             [binary, "-m", str(model_path), "--host", "127.0.0.1", "--port", str(self.port),
-             "-l", self.language],
+             "-l", self.language] + extra,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

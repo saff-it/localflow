@@ -28,11 +28,11 @@ mic_release_seconds = 15  # release the mic (orange dot off) after N idle second
 
 [asr]
 engine = "auto"        # auto = whisper.cpp (Metal GPU) if available, else faster-whisper (CPU)
-whispercpp_model = "large-v3-turbo-q5_0"  # ggml model for whisper.cpp (localflow download ggml:<name>)
+whispercpp_model = "large-v3-turbo-q8_0"  # ggml model for whisper.cpp (localflow download ggml:<name>)
 model = "small"        # faster-whisper fallback: tiny | base | small | medium | large-v3 | large-v3-turbo
 language = ""          # "" = auto-detect per utterance; or force "it", "en", ...
 compute_type = "int8"
-beam_size = 1          # 1 = fastest (greedy); 5 = slower, slightly more accurate
+beam_size = 5          # 5 = più accurato, gratis su GPU (whisper.cpp); con fallback CPU conviene 1
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
@@ -64,9 +64,9 @@ class Config:
     model: str = "small"
     language: str = ""
     compute_type: str = "int8"
-    beam_size: int = 1
+    beam_size: int = 5
     engine: str = "auto"
-    whispercpp_model: str = "large-v3-turbo-q5_0"
+    whispercpp_model: str = "large-v3-turbo-q8_0"
     format_enabled: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
