@@ -36,6 +36,7 @@ beam_size = 5          # 5 = più accurato, gratis su GPU (whisper.cpp); con fal
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
+punctuate = true       # rescue pass on long unpunctuated dictations (word-for-word guaranteed by code)
 ollama_url = "http://127.0.0.1:11434"
 ollama_model = "llama3.2:3b"
 app_aware_tone = true  # tell the LLM which app the text is being pasted into
@@ -68,6 +69,7 @@ class Config:
     engine: str = "auto"
     whispercpp_model: str = "large-v3-turbo-q8_0"
     format_enabled: bool = True
+    punctuate_enabled: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
     app_aware_tone: bool = True
@@ -112,6 +114,7 @@ def load() -> Config:
 
     fmt = data.get("format", {})
     cfg.format_enabled = bool(fmt.get("enabled", cfg.format_enabled))
+    cfg.punctuate_enabled = bool(fmt.get("punctuate", cfg.punctuate_enabled))
     cfg.ollama_url = fmt.get("ollama_url", cfg.ollama_url).rstrip("/")
     cfg.ollama_model = fmt.get("ollama_model", cfg.ollama_model)
     cfg.app_aware_tone = bool(fmt.get("app_aware_tone", cfg.app_aware_tone))

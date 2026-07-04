@@ -24,9 +24,26 @@ def _play(path: str, enabled: bool) -> None:
         subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+# Whisper's initial_prompt is a STYLE example it tends to continue, not an
+# instruction: a well-punctuated primer nudges it to punctuate even rushed
+# speech with no prosodic pauses. Only used when the language is fixed
+# (a primer in the wrong language would bias auto-detection).
+PUNCTUATION_PRIMERS = {
+    "it": "Perfetto, allora facciamo così: ci sentiamo domani alle 15, va bene? Benissimo, grazie mille.",
+    "en": "Alright, let's do this: I'll call you tomorrow at 3 pm, okay? Great, thanks a lot.",
+    "es": "Perfecto, entonces hacemos así: te llamo mañana a las tres, ¿vale? Genial, muchas gracias.",
+}
+
+
 def _glossary_prompt(cfg: config.Config) -> str:
+    parts = []
     terms = list(cfg.terms) + list(cfg.replacements.values())
-    return ("Glossary: " + ", ".join(terms) + ".") if terms else ""
+    if terms:
+        parts.append("Glossario: " + ", ".join(terms) + ".")
+    primer = PUNCTUATION_PRIMERS.get(cfg.language)
+    if primer:
+        parts.append(primer)
+    return " ".join(parts)
 
 
 class LocalFlowDaemon:
@@ -40,12 +57,16 @@ class LocalFlowDaemon:
             print("⚠️  impossibile aprire il microfono: %s" % exc)
         self.transcriber = create_transcriber(cfg, initial_prompt=_glossary_prompt(cfg), persistent=True)
         print("ASR engine: %s" % type(self.transcriber).__name__)
-        self.use_llm = cfg.format_enabled and formatter.available(cfg.ollama_url)
+        self.ollama_up = formatter.available(cfg.ollama_url)
+        self.use_llm = cfg.format_enabled and self.ollama_up
         if self.use_llm:
             print("AI cleanup: on — %s via Ollama" % cfg.ollama_model)
-            threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         else:
             print("AI cleanup: off")
+        if self.ollama_up and cfg.punctuate_enabled:
+            print("Punteggiatura di soccorso: on (solo su dettature lunghe senza segni)")
+        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled):
+            threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         self._busy = threading.Lock()
         self._last_paste = 0.0
         self._listener = None
@@ -135,6 +156,9 @@ class LocalFlowDaemon:
             text = formatter.cleanup(text, cfg.ollama_url, cfg.ollama_model, app_name)
             if text != raw_text:
                 print("  (grezzo: %s)" % raw_text)
+        elif self.ollama_up and cfg.punctuate_enabled and formatter.needs_punctuation(text):
+            # Rushed speech with no pauses: rescue the punctuation, words untouchable.
+            text = formatter.punctuate(text, cfg.ollama_url, cfg.ollama_model)
         llm_secs = time.time() - llm_started
         text = textproc.apply_dictionary(text, cfg.replacements)
         if cfg.paste:
