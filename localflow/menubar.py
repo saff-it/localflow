@@ -23,6 +23,12 @@ MODELS = [
     ("Massima precisione (~4-5s)", "large-v3-q5_0"),
     ("Veloce (~1-2s)", "large-v3-turbo-q8_0"),
 ]
+HOTKEYS = [
+    ("⌘ Command destro", "cmd_r"),
+    ("⌥ Option destro", "alt_r"),
+    ("⌃ Control destro", "ctrl_r"),
+    ("F13", "f13"),
+]
 PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.localflow.plist"
 
 
@@ -48,6 +54,14 @@ class LocalFlowMenuApp(rumps.App):
             self.model_items[name] = item
             model_menu.add(item)
         self.model_menu = model_menu
+        self.hotkey_items = {}
+        hotkey_menu = rumps.MenuItem("Tasto di dettatura")
+        for label, code in HOTKEYS:
+            item = rumps.MenuItem(label, callback=self._make_hotkey_cb(code))
+            item.state = 1 if cfg.hotkey == code else 0
+            self.hotkey_items[code] = item
+            hotkey_menu.add(item)
+        self.hotkey_menu = hotkey_menu
         self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
@@ -56,8 +70,8 @@ class LocalFlowMenuApp(rumps.App):
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
-        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.polish_item,
-                     None, recent, None, self.login_item, open_cfg, restart, None]
+        self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
+                     self.polish_item, None, recent, None, self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -114,6 +128,15 @@ class LocalFlowMenuApp(rumps.App):
             for c, item in self.lang_items.items():
                 item.state = 1 if c == code else 0
             threading.Thread(target=self.daemon.set_language, args=(code,), daemon=True).start()
+        return cb
+
+    def _make_hotkey_cb(self, code):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for c, item in self.hotkey_items.items():
+                item.state = 1 if c == code else 0
+            threading.Thread(target=self.daemon.set_hotkey, args=(code,), daemon=True).start()
         return cb
 
     def _make_model_cb(self, name):

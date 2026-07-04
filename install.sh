@@ -43,8 +43,8 @@ echo "-- avvio al login (LaunchAgent, inattivo finché non lo abiliti dal menu)"
 PLIST="$HOME/Library/LaunchAgents/com.localflow.plist"
 sed -e "s#__ROOT__#$(pwd)#g" -e "s#__HOME__#$HOME#g" deploy/com.localflow.plist.template > "$PLIST"
 
-echo "-- app di avvio rapido (Spotlight: 'Avvia LocalFlow')"
-osacompile -o "$HOME/Applications/Avvia LocalFlow.app" -e \
+echo "-- app di avvio rapido (Spotlight/Launchpad: 'LocalFlow')"
+osacompile -o "$HOME/Applications/LocalFlow.app" -e \
   'do shell script "launchctl kickstart gui/$(id -u)/com.localflow 2>/dev/null || launchctl load ~/Library/LaunchAgents/com.localflow.plist"' 2>/dev/null || true
 
 echo

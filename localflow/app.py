@@ -115,6 +115,15 @@ class LocalFlowDaemon:
                 old.close()
             self.status = "pronto"
 
+    def set_hotkey(self, key_name: str) -> None:
+        """Persist + swap the hold-to-talk key at runtime."""
+        config.set_key("key", '"%s"' % key_name)
+        self.cfg.hotkey = key_name
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
+        self.start_listener()
+
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
         self.cfg.format_enabled = enabled
