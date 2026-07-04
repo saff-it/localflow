@@ -40,20 +40,23 @@ def split_on_silence(clip: np.ndarray, sample_rate: int,
 
 
 class Recorder:
-    """The stream object stays open, but audio IO is suspended after
-    `idle_stop_seconds` without dictation: macOS's orange mic indicator goes
-    away when idle, without the open/close-per-utterance churn that wedged
-    CoreAudio. A watchdog thread handles the release; start() resumes IO."""
+    """The stream stays open while dictating; after `idle_stop_seconds` of
+    quiet a watchdog suspends audio IO so macOS's orange mic indicator goes
+    away. Hardened after a freeze incident: CoreAudio calls (open/start/stop/
+    close) run under their own lock, NEVER under the fast frames lock, so a
+    wedged CoreAudio call can no longer block the hotkey listener or the UI.
+    Any failure path falls back to a full close-and-reopen."""
 
     def __init__(self, sample_rate: int = 16000, device: Optional[str] = None,
-                 idle_stop_seconds: float = 15.0):
+                 idle_stop_seconds: float = 300.0):
         self.sample_rate = sample_rate
         self.device = device
         self.idle_stop_seconds = idle_stop_seconds
         self._frames: List[np.ndarray] = []
         self._collecting = False
         self._stream = None
-        self._lock = threading.Lock()
+        self._frames_lock = threading.Lock()   # fast: only flags and buffers
+        self._audio_lock = threading.Lock()    # slow: CoreAudio open/start/stop/close
         self._last_activity = 0.0
         self._watchdog_started = False
 
@@ -78,27 +81,28 @@ class Recorder:
             import time
 
             while True:
-                time.sleep(2)
-                with self._lock:
-                    if (
-                        self._stream is not None
-                        and not getattr(self._stream, "closed", False)
-                        and self._stream.active
-                        and not self._collecting
-                        and time.monotonic() - self._last_activity > self.idle_stop_seconds
-                    ):
+                time.sleep(5)
+                if self._collecting or time.monotonic() - self._last_activity <= self.idle_stop_seconds:
+                    continue
+                with self._audio_lock:
+                    stream = self._stream
+                    if stream is not None and not getattr(stream, "closed", False) and stream.active:
                         try:
-                            self._stream.stop()  # suspend IO: orange dot off, device stays open
+                            stream.stop()  # suspend IO: orange dot off, device stays open
                         except Exception:
-                            pass
+                            try:
+                                stream.close()
+                            except Exception:
+                                pass
+                            self._stream = None  # will be reopened on next start()
 
         threading.Thread(target=watch, daemon=True).start()
 
     def ensure_open(self) -> None:
         import time
 
-        with self._lock:
-            self._last_activity = time.monotonic()
+        self._last_activity = time.monotonic()
+        with self._audio_lock:
             if self._stream is None or getattr(self._stream, "closed", False):
                 self._open_stream()
             elif self._stream.stopped:
@@ -112,6 +116,17 @@ class Recorder:
                     self._open_stream()
         self._start_watchdog()
 
+    def reopen(self) -> None:
+        """Full reset — used when a dictation came back empty (wedged stream)."""
+        with self._audio_lock:
+            if self._stream is not None:
+                try:
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+            self._open_stream()
+
     def _on_block(self, indata, _frames, _time, _status) -> None:
         if self._collecting:
             self._frames.append(indata.copy())
@@ -120,25 +135,25 @@ class Recorder:
         import time
 
         self.ensure_open()
-        with self._lock:
+        with self._frames_lock:
             self._frames = []
             self._collecting = True
-            self._last_activity = time.monotonic()
+        self._last_activity = time.monotonic()
 
     def stop(self) -> np.ndarray:
         import time
 
-        with self._lock:
+        with self._frames_lock:
             self._collecting = False
-            self._last_activity = time.monotonic()
-            if not self._frames:
-                return np.zeros(0, dtype=np.float32)
-            clip = np.concatenate(self._frames)[:, 0]
+            frames = self._frames
             self._frames = []
-            return clip
+        self._last_activity = time.monotonic()
+        if not frames:
+            return np.zeros(0, dtype=np.float32)
+        return np.concatenate(frames)[:, 0]
 
     def close(self) -> None:
-        with self._lock:
+        with self._audio_lock:
             if self._stream is not None:
                 try:
                     self._stream.stop()

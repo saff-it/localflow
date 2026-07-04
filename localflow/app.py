@@ -128,16 +128,22 @@ class LocalFlowDaemon:
 
     def _on_start(self):
         _play(SOUND_START, self.cfg.sounds)
-        try:
-            self.recorder.start()
-        except Exception as exc:  # a crash here would kill the hotkey listener
-            print("⚠️  microfono non disponibile: %s" % exc)
+
+        def go():  # never block the pynput callback thread: a hung CoreAudio
+            try:   # call here used to kill the hotkey for good
+                self.recorder.start()
+            except Exception as exc:
+                print("⚠️  microfono non disponibile: %s" % exc)
+
+        threading.Thread(target=go, daemon=True).start()
 
     def _on_stop(self):
         clip = self.recorder.stop()
         duration = len(clip) / float(self.cfg.sample_rate)
         if duration < MIN_UTTERANCE_SECONDS:
             print("(ignorato: %.2fs di audio — pressione troppo breve o mic muto)" % duration)
+            if duration == 0:  # zero frames while collecting = wedged stream: heal it
+                threading.Thread(target=self.recorder.reopen, daemon=True).start()
             return
 
         def work():

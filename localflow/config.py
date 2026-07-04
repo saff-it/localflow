@@ -24,7 +24,7 @@ key = "alt_r"
 [audio]
 sample_rate = 16000
 device = ""            # "" = system default input device
-mic_release_seconds = 0   # 0 = mic always ready (STABLE); >0 releases it when idle but can wedge CoreAudio
+mic_release_seconds = 300 # release the mic (orange dot off) after N idle seconds; 0 = always ready
 debug_keep_audio = true   # keep the last 5 dictation clips in ~/.localflow/debug (local only) for tuning
 
 [asr]
@@ -62,7 +62,7 @@ class Config:
     hotkey: str = "alt_r"
     sample_rate: int = 16000
     device: str = ""
-    mic_release_seconds: float = 0.0
+    mic_release_seconds: float = 300.0
     debug_keep_audio: bool = True
     model: str = "small"
     language: str = ""
