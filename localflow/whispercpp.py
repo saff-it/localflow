@@ -126,7 +126,7 @@ class WhisperCppServer:
             self.port = probe.getsockname()[1]
         self._proc = subprocess.Popen(
             [binary, "-m", str(model_path), "--host", "127.0.0.1", "--port", str(self.port),
-             "-l", self.language] + extra,
+             "-l", self.language, "--no-timestamps"] + extra,  # -nt: segment joins were splitting words mid-token
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
