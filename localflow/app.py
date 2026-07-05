@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 
-from . import audio, config, formatter, hotkey, inject, textproc
+from . import audio, config, formatter, hotkey, inject, streaming, textproc
 from .transcriber import create_transcriber
 
 SOUND_START = "/System/Library/Sounds/Pop.aiff"
@@ -71,6 +71,10 @@ class LocalFlowDaemon:
         self._busy = threading.Lock()
         self._last_paste = 0.0
         self._listener = None
+        self._session = None
+        self._monitor_stop = threading.Event()
+        if cfg.streaming_enabled and getattr(self.transcriber, "supports_streaming", False):
+            print("Streaming: on — trascrivo mentre parli (blocchi da %.0fs)" % cfg.chunk_seconds)
         threading.Thread(target=self._wake_watch, daemon=True).start()
         self.status = "pronto"
 
@@ -160,6 +164,10 @@ class LocalFlowDaemon:
             self._listener = None
         self.start_listener()
 
+    def set_streaming(self, enabled: bool) -> None:
+        config.set_key("streaming", "true" if enabled else "false")
+        self.cfg.streaming_enabled = enabled
+
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
         self.cfg.format_enabled = enabled
@@ -171,6 +179,21 @@ class LocalFlowDaemon:
 
     # -- dictation pipeline ----------------------------------------------------
 
+    def _use_streaming(self) -> bool:
+        return self.cfg.streaming_enabled and getattr(self.transcriber, "supports_streaming", False)
+
+    def _monitor(self, session, stop_event):
+        """Feeds drained mic samples into the streaming session 4×/second."""
+        while not stop_event.is_set():
+            time.sleep(0.25)
+            if stop_event.is_set():
+                break
+            try:
+                session.feed(self.recorder.drain())
+            except Exception as exc:
+                print("⚠️  streaming feed: %s" % exc)
+                break
+
     def _on_start(self, copy_mode=False):
         self._copy_mode = copy_mode
         _play(SOUND_START, self.cfg.sounds)
@@ -180,14 +203,30 @@ class LocalFlowDaemon:
                 self.recorder.start()
             except Exception as exc:
                 print("⚠️  microfono non disponibile: %s" % exc)
+                return
+            if self._use_streaming():
+                self._monitor_stop = threading.Event()
+                self._session = streaming.StreamingSession(
+                    self.transcriber, self.cfg.sample_rate, self.cfg.chunk_seconds,
+                    base_prompt=_glossary_prompt(self.cfg),
+                )
+                threading.Thread(target=self._monitor,
+                                 args=(self._session, self._monitor_stop), daemon=True).start()
 
         threading.Thread(target=go, daemon=True).start()
 
     def _on_stop(self):
+        session, self._session = self._session, None
+        if session is not None:
+            self._monitor_stop.set()
         clip = self.recorder.stop()
         duration = len(clip) / float(self.cfg.sample_rate)
+        if session is not None:
+            duration += session.total_seconds
         if duration < MIN_UTTERANCE_SECONDS:
             print("(ignorato: %.2fs di audio — pressione troppo breve o mic muto)" % duration)
+            if session is not None:
+                session.abort()
             if duration == 0:  # zero frames while collecting = wedged stream: heal it
                 threading.Thread(target=self.recorder.reopen, daemon=True).start()
             return
@@ -199,7 +238,7 @@ class LocalFlowDaemon:
             with self._busy:
                 self.status = "trascrivo..."
                 try:
-                    self._process(clip, duration, app_name, copy_mode)
+                    self._process(clip, duration, app_name, copy_mode, session)
                 except Exception as exc:  # never die silently in a worker thread
                     print("⚠️  errore dettatura: %s" % exc)
                 finally:
@@ -222,16 +261,27 @@ class LocalFlowDaemon:
         except Exception:
             pass  # debugging aid must never break dictation
 
-    def _process(self, clip, duration, app_name, copy_mode=False):
+    def _process(self, clip, duration, app_name, copy_mode=False, session=None):
         cfg = self.cfg
+        started = time.time()
+        streamed = False
+        if session is not None:
+            try:
+                texts, lang, _wait = session.finish(clip)
+                text = textproc.join_chunks(texts)
+                clip = session.full_audio()  # complete audio, for the debug ring
+                streamed = True
+            except Exception as exc:
+                print("⚠️  streaming fallito (%s): ripiego sul metodo classico" % exc)
+                clip = session.full_audio()
+        if not streamed:
+            pieces = audio.split_on_silence(clip, cfg.sample_rate)
+            results = [self.transcriber.transcribe(piece) for piece in pieces]
+            text = textproc.join_chunks(t for t, _ in results)
+            lang = results[0][1]
         if cfg.debug_keep_audio:
             self._save_debug_clip(clip)
-        started = time.time()
-        pieces = audio.split_on_silence(clip, cfg.sample_rate)
-        results = [self.transcriber.transcribe(piece) for piece in pieces]
-        text = textproc.join_chunks(t for t, _ in results)
-        lang = results[0][1]
-        asr_secs = time.time() - started
+        asr_secs = time.time() - started  # in streaming = attesa percepita al rilascio
         text = textproc.tidy(text)
         if not text:
             return

@@ -72,6 +72,8 @@ class LocalFlowMenuApp(rumps.App):
             copykey_menu.add(item)
         self.copykey_menu = copykey_menu
         self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
+        self.stream_item = rumps.MenuItem("Streaming (trascrive mentre parli)", callback=self._toggle_streaming)
+        self.stream_item.state = 1 if cfg.streaming_enabled else 0
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
         self.polish_item.state = 1 if cfg.format_enabled else 0
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
@@ -80,7 +82,8 @@ class LocalFlowMenuApp(rumps.App):
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.copykey_menu, self.polish_item, None, recent, None, self.login_item, open_cfg, restart, None]
+                     self.copykey_menu, self.stream_item, self.polish_item, None, recent, None,
+                     self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
 
@@ -177,6 +180,12 @@ class LocalFlowMenuApp(rumps.App):
         else:
             item.title = "⏻ Accendi microfono"
             threading.Thread(target=self.daemon.pause, daemon=True).start()
+
+    def _toggle_streaming(self, item):
+        if self.daemon is None:
+            return
+        item.state = 0 if item.state else 1
+        self.daemon.set_streaming(bool(item.state))
 
     def _toggle_polish(self, item):
         if self.daemon is None:

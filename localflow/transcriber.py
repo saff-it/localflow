@@ -46,13 +46,13 @@ class Transcriber:
         self.initial_prompt: Optional[str] = initial_prompt or None
         self.beam_size = beam_size
 
-    def transcribe(self, audio) -> Tuple[str, str]:
+    def transcribe(self, audio, sample_rate: int = 16000, prompt: Optional[str] = None) -> Tuple[str, str]:
         """audio: numpy float32 mono @16 kHz, or a file path. Returns (text, language)."""
         segments, info = self._model.transcribe(
             audio,
             language=self.language,
             vad_filter=True,
-            initial_prompt=self.initial_prompt,
+            initial_prompt=prompt if prompt is not None else self.initial_prompt,
             beam_size=self.beam_size,
         )
         text = " ".join(seg.text.strip() for seg in segments).strip()

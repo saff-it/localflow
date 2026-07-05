@@ -11,6 +11,21 @@ from typing import List, Optional
 import numpy as np
 
 
+def find_quiet_cut(clip: np.ndarray, sample_rate: int, search_seconds: float) -> int:
+    """Index of the quietest 200 ms centre within the LAST `search_seconds`
+    of `clip` — the least damaging place to cut speech."""
+    frame = int(0.2 * sample_rate)
+    hop = frame // 2
+    lo = max(0, len(clip) - int(search_seconds * sample_rate))
+    segment = clip[lo:]
+    best_i, best_rms = 0, float("inf")
+    for i in range(0, max(1, len(segment) - frame), hop):
+        rms = float(np.sqrt(np.mean(segment[i:i + frame] ** 2)))
+        if rms < best_rms:
+            best_rms, best_i = rms, i
+    return lo + best_i + frame // 2
+
+
 def split_on_silence(clip: np.ndarray, sample_rate: int,
                      max_seconds: float = 28.0, search_seconds: float = 8.0) -> List[np.ndarray]:
     """Split a long clip at the quietest 200 ms found in the tail of each
@@ -19,20 +34,10 @@ def split_on_silence(clip: np.ndarray, sample_rate: int,
     max_n = int(max_seconds * sample_rate)
     if len(clip) <= max_n:
         return [clip]
-    frame = int(0.2 * sample_rate)
-    hop = frame // 2
     parts: List[np.ndarray] = []
     start = 0
     while len(clip) - start > max_n:
-        lo = max(start, start + max_n - int(search_seconds * sample_rate))
-        hi = start + max_n
-        segment = clip[lo:hi]
-        best_i, best_rms = 0, float("inf")
-        for i in range(0, len(segment) - frame, hop):
-            rms = float(np.sqrt(np.mean(segment[i:i + frame] ** 2)))
-            if rms < best_rms:
-                best_rms, best_i = rms, i
-        cut = lo + best_i + frame // 2
+        cut = start + find_quiet_cut(clip[start:start + max_n], sample_rate, search_seconds)
         parts.append(clip[start:cut])
         start = cut
     parts.append(clip[start:])
@@ -152,6 +157,16 @@ class Recorder:
             self._frames = []
             self._collecting = True
         self._last_activity = time.monotonic()
+
+    def drain(self) -> np.ndarray:
+        """Take what's buffered so far WITHOUT stopping collection — the tap
+        the streaming pipeline drinks from while the key is still held."""
+        with self._frames_lock:
+            frames = self._frames
+            self._frames = []
+        if not frames:
+            return np.zeros(0, dtype=np.float32)
+        return np.concatenate(frames)[:, 0]
 
     def stop(self) -> np.ndarray:
         import time

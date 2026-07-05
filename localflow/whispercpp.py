@@ -78,9 +78,10 @@ class WhisperCppTranscriber:
         self.initial_prompt = initial_prompt
         self.beam_size = beam_size
 
-    def transcribe(self, audio, sample_rate: int = 16000) -> Tuple[str, str]:
+    def transcribe(self, audio, sample_rate: int = 16000, prompt: Optional[str] = None) -> Tuple[str, str]:
         """audio: numpy float32 mono @16 kHz, or a path to an audio file."""
         source, tmp_path = _as_wav(audio, sample_rate)
+        effective_prompt = prompt if prompt is not None else self.initial_prompt
         cmd = [
             self.binary,
             "-m", str(self.model_path),
@@ -91,8 +92,8 @@ class WhisperCppTranscriber:
         ]  # flash attention is on by default in current whisper.cpp
         if self.beam_size > 1:  # nearly free on GPU: turbo's decoder is tiny
             cmd += ["-bs", str(self.beam_size)]
-        if self.initial_prompt:
-            cmd += ["--prompt", self.initial_prompt]
+        if effective_prompt:
+            cmd += ["--prompt", effective_prompt]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         finally:
@@ -110,6 +111,8 @@ class WhisperCppTranscriber:
 class WhisperCppServer:
     """Keeps the model resident on the GPU via whisper-server: per-utterance cost
     is pure inference instead of model reload (the whisper-cli tax, ~5s/call)."""
+
+    supports_streaming = True  # resident model = chunks can be transcribed live
 
     def __init__(self, model_name: str, language: str = "", initial_prompt: str = "", beam_size: int = 5):
         binary = find_binary("whisper-server")
@@ -147,13 +150,14 @@ class WhisperCppServer:
                 time.sleep(0.3)
         raise RuntimeError("whisper-server did not become ready in %.0fs" % timeout)
 
-    def transcribe(self, audio, sample_rate: int = 16000) -> Tuple[str, str]:
+    def transcribe(self, audio, sample_rate: int = 16000, prompt: Optional[str] = None) -> Tuple[str, str]:
         import requests
 
         source, tmp_path = _as_wav(audio, sample_rate)
         data = {"temperature": "0.0", "response_format": "json"}
-        if self.initial_prompt:
-            data["prompt"] = self.initial_prompt
+        effective_prompt = prompt if prompt is not None else self.initial_prompt
+        if effective_prompt:
+            data["prompt"] = effective_prompt
         try:
             with open(source, "rb") as fh:
                 resp = requests.post(
