@@ -101,7 +101,9 @@ class Recorder:
             import time
 
             interval = 1 if self.idle_stop_seconds <= 10 else 5
-            close_after = max(60.0, self.idle_stop_seconds)
+            # Full close frees coreaudiod's battery-draining sleep assertion, but
+            # reopening costs ~0.5s at the next press: do it only after a real break.
+            close_after = max(600.0, self.idle_stop_seconds)
             while True:
                 time.sleep(interval)
                 if self._collecting:

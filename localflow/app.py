@@ -20,8 +20,20 @@ SOUND_COPY = "/System/Library/Sounds/Tink.aiff"
 MIN_UTTERANCE_SECONDS = 0.3  # shorter than this = accidental tap, skip (also kills silence hallucinations)
 
 
+_sounds = {}
+
+
 def _play(path: str, enabled: bool) -> None:
-    if enabled:
+    if not enabled:
+        return
+    try:  # in-process NSSound: instant, no afplay spawn to wait for
+        if path not in _sounds:
+            from AppKit import NSSound
+
+            _sounds[path] = NSSound.alloc().initWithContentsOfFile_byReference_(path, True)
+        _sounds[path].stop()  # rewind if still playing from a rapid previous use
+        _sounds[path].play()
+    except Exception:
         subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -204,7 +216,6 @@ class LocalFlowDaemon:
 
     def _on_start(self, copy_mode=False):
         self._copy_mode = copy_mode
-        _play(SOUND_START, self.cfg.sounds)
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
             try:   # call here used to kill the hotkey for good
@@ -212,6 +223,10 @@ class LocalFlowDaemon:
             except Exception as exc:
                 print("⚠️  microfono non disponibile: %s" % exc)
                 return
+            # Pop only when the mic is REALLY listening: if the device needed
+            # reopening after a long break, the sound arrives late but honest —
+            # no syllables spoken into a mic that wasn't there yet.
+            _play(SOUND_START, self.cfg.sounds)
             if self._use_streaming():
                 self._monitor_stop = threading.Event()
                 self._session = streaming.StreamingSession(
