@@ -41,6 +41,17 @@ def frontmost_app() -> str:
     return result.stdout.strip()
 
 
+def _ax_systemwide():
+    """Systemwide AX element with a HARD 0.25s messaging timeout: sluggish
+    Electron apps used to block this for seconds, delaying the recorder past
+    the key release and spawning zombie sessions."""
+    import ApplicationServices as AS
+
+    system = AS.AXUIElementCreateSystemWide()
+    AS.AXUIElementSetMessagingTimeout(system, 0.25)
+    return system
+
+
 def focused_is_editable() -> bool:
     """True if the focused UI element looks like a text field. FAIL-OPEN: any
     doubt (apps with poor accessibility exposure) returns True — dictation must
@@ -48,7 +59,7 @@ def focused_is_editable() -> bool:
     try:
         import ApplicationServices as AS  # already present: pynput depends on it
 
-        system = AS.AXUIElementCreateSystemWide()
+        system = _ax_systemwide()
         err, focused = AS.AXUIElementCopyAttributeValue(system, AS.kAXFocusedUIElementAttribute, None)
         if err != 0 or focused is None:
             return True

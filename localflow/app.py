@@ -217,6 +217,12 @@ class LocalFlowDaemon:
 
     def _on_start(self, copy_mode=False):
         self._copy_mode = copy_mode
+        self._hold_seq = getattr(self, "_hold_seq", 0) + 1
+        self._holding = True
+        hold_id = self._hold_seq
+
+        def still_held():
+            return self._holding and self._hold_seq == hold_id
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
             if not copy_mode and not inject.focused_is_editable():
@@ -226,27 +232,39 @@ class LocalFlowDaemon:
                 print("(non sei in un campo di testo: dettatura non avviata — usa il tasto copia per dettare ovunque)")
                 self._copy_mode = None  # tells _on_stop to ignore this hold
                 return
+            if not still_held():
+                return  # key already released: NEVER start a zombie recording
             try:   # call here used to kill the hotkey for good
                 self.recorder.start()
             except Exception as exc:
                 print("⚠️  microfono non disponibile: %s" % exc)
+                return
+            if not still_held():  # released while the mic was waking up: discard
+                self.recorder.stop()
                 return
             # Pop only when the mic is REALLY listening: if the device needed
             # reopening after a long break, the sound arrives late but honest —
             # no syllables spoken into a mic that wasn't there yet.
             _play(SOUND_START, self.cfg.sounds)
             if self._use_streaming():
+                self._monitor_stop.set()  # belt: no stray monitor may survive
                 self._monitor_stop = threading.Event()
-                self._session = streaming.StreamingSession(
+                session = streaming.StreamingSession(
                     self.transcriber, self.cfg.sample_rate, self.cfg.chunk_seconds,
                     base_prompt=_glossary_prompt(self.cfg),
                 )
+                if not still_held():  # paranoia pays: released during setup
+                    session.abort()
+                    self.recorder.stop()
+                    return
+                self._session = session
                 threading.Thread(target=self._monitor,
-                                 args=(self._session, self._monitor_stop), daemon=True).start()
+                                 args=(session, self._monitor_stop), daemon=True).start()
 
         threading.Thread(target=go, daemon=True).start()
 
     def _on_stop(self):
+        self._holding = False  # any late go() for this hold now aborts itself
         if getattr(self, "_copy_mode", False) is None:  # hold refused at start
             return
         session, self._session = self._session, None
