@@ -285,6 +285,9 @@ class LocalFlowDaemon:
         if not streamed:
             if cfg.debug_keep_audio:
                 self._save_debug_clip(clip)  # save BEFORE ASR: audio never lost
+            if not audio.has_speech(clip, cfg.sample_rate):
+                print("(ignorato: nessuna voce rilevata)")
+                return
             try:
                 pieces = audio.split_on_silence(clip, cfg.sample_rate)
                 results = [self.transcriber.transcribe(piece) for piece in pieces]
@@ -309,6 +312,7 @@ class LocalFlowDaemon:
         self._mark_engine_use()
         text = textproc.tidy(text)
         if not text:
+            print("(ignorato: nessuna voce rilevata)")
             return
         llm_started = time.time()
         if self.use_llm:

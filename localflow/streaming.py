@@ -19,7 +19,6 @@ import numpy as np
 from . import audio
 
 MIN_CHUNK_SECONDS = 3.0     # never commit crumbs: seams are where errors live
-SILENCE_RMS = 1e-4          # near-silent chunk = hallucination bait, skip ASR
 
 
 class StreamingSession:
@@ -62,10 +61,8 @@ class StreamingSession:
         self._done.set()
 
     def _commit(self, chunk: np.ndarray) -> None:
-        if len(chunk) == 0:
-            return
-        if float(np.sqrt(np.mean(chunk ** 2))) < SILENCE_RMS:
-            return
+        if len(chunk) == 0 or not audio.has_speech(chunk, self.sample_rate):
+            return  # silence never reaches the model: no 'grazie mille' out of thin air
         self._queue.put(chunk)
 
     # -- fed by the monitor thread while the key is held -----------------------

@@ -11,6 +11,21 @@ from typing import List, Optional
 import numpy as np
 
 
+# Calibrated on the user's real mic (4 Jul black-box clips): true speech peaks
+# at frame-RMS >= 0.029, silent key-presses stay <= 0.011.
+MIN_SPEECH_RMS = 0.015
+
+
+def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
+    """True if at least one 100 ms frame reaches speech-level energy — the gate
+    that stops Whisper from hallucinating 'grazie mille' on silence."""
+    frame = int(0.1 * sample_rate)
+    for i in range(0, max(1, len(clip) - frame), frame):
+        if float(np.sqrt(np.mean(clip[i:i + frame] ** 2))) >= MIN_SPEECH_RMS:
+            return True
+    return False
+
+
 def find_quiet_cut(clip: np.ndarray, sample_rate: int, search_seconds: float) -> int:
     """Index of the quietest 200 ms centre within the LAST `search_seconds`
     of `clip` — the least damaging place to cut speech."""
