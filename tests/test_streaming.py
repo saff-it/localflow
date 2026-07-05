@@ -67,6 +67,20 @@ class StreamingSessionTests(unittest.TestCase):
         # no audio lost across the cut
         self.assertAlmostEqual(sum(c["secs"] for c in fake.calls), s.total_seconds, places=1)
 
+    def test_post_process_translates_but_asr_context_stays_raw(self):
+        fake = FakeTranscriber()
+        s = StreamingSession(fake, SR, chunk_seconds=6,
+                             post_process=lambda text, done: text.upper())
+        s.feed(tone(5))
+        s.feed(silence(0.5))
+        s.feed(tone(5))
+        wait_done(s, fake, 1)
+        texts, _, _ = s.finish(tone(2))
+        self.assertEqual(texts, ["BLOCCO1.", "BLOCCO2."])  # output post-processed
+        # ...but the rolling ASR context must stay in the RAW (spoken) language
+        self.assertIn("blocco1.", fake.calls[1]["prompt"])
+        self.assertNotIn("BLOCCO1.", fake.calls[1]["prompt"])
+
     def test_silence_only_is_never_transcribed(self):
         fake = FakeTranscriber()
         s = StreamingSession(fake, SR, chunk_seconds=5)

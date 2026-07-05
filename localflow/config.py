@@ -35,7 +35,8 @@ model = "small"        # faster-whisper fallback: tiny | base | small | medium |
 language = ""          # "" = auto-detect per utterance; or force "it", "en", ...
 compute_type = "int8"
 beam_size = 5          # 5 = più accurato, gratis su GPU (whisper.cpp); con fallback CPU conviene 1
-translate = false      # parla in QUALSIASI lingua, esce inglese (traduzione nativa Whisper, latenza zero)
+translate = false          # parla italiano, esce inglese
+translate_quality = true   # true = traduzione AI (inglese naturale, ~6-9s); false = nativa Whisper (letterale, ~3s)
 streaming = true       # trascrivi MENTRE parli: al rilascio resta solo la coda (~1s di attesa)
 chunk_seconds = 7      # dimensione dei blocchi trascritti in corsa (tagliati nelle tue pause)
 
@@ -76,6 +77,7 @@ class Config:
     engine: str = "auto"
     whispercpp_model: str = "large-v3-turbo-q8_0"
     translate_enabled: bool = False
+    translate_quality: bool = True
     streaming_enabled: bool = True
     chunk_seconds: float = 7.0
     format_enabled: bool = True
@@ -124,6 +126,7 @@ def load() -> Config:
     cfg.engine = asr.get("engine", cfg.engine)
     cfg.whispercpp_model = asr.get("whispercpp_model", cfg.whispercpp_model)
     cfg.translate_enabled = bool(asr.get("translate", cfg.translate_enabled))
+    cfg.translate_quality = bool(asr.get("translate_quality", cfg.translate_quality))
     cfg.streaming_enabled = bool(asr.get("streaming", cfg.streaming_enabled))
     cfg.chunk_seconds = float(asr.get("chunk_seconds", cfg.chunk_seconds))
 

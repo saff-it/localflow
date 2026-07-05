@@ -23,15 +23,17 @@ MIN_CHUNK_SECONDS = 3.0     # never commit crumbs: seams are where errors live
 
 class StreamingSession:
     def __init__(self, transcriber, sample_rate: int, chunk_seconds: float = 7.0,
-                 base_prompt: str = "", context_chars: int = 200):
+                 base_prompt: str = "", context_chars: int = 200, post_process=None):
         self.transcriber = transcriber
         self.sample_rate = sample_rate
         self.chunk_seconds = max(4.0, chunk_seconds)
         self.base_prompt = base_prompt
         self.context_chars = context_chars
+        self.post_process = post_process  # fn(text, final_texts) -> text, e.g. per-chunk LLM translation
         self._carry = np.zeros(0, dtype=np.float32)
         self._full: List[np.ndarray] = []
-        self._texts: List[str] = []
+        self._texts: List[str] = []       # final (post-processed) texts, in order
+        self._raw_texts: List[str] = []   # ASR-language texts: the rolling ASR context
         self._lang = ""
         self._queue: "queue.Queue[Optional[np.ndarray]]" = queue.Queue()
         self._done = threading.Event()
@@ -49,10 +51,15 @@ class StreamingSession:
                 continue  # drain the queue, the caller will fall back to batch
             try:
                 prompt = self.base_prompt
-                context = " ".join(self._texts)[-self.context_chars:].strip()
+                # ASR context must stay in the SPOKEN language: with per-chunk
+                # translation the final texts are English, useless to Whisper.
+                context = " ".join(self._raw_texts)[-self.context_chars:].strip()
                 if context:
                     prompt = (prompt + " " + context).strip()
                 text, lang = self.transcriber.transcribe(chunk, self.sample_rate, prompt=prompt)
+                self._raw_texts.append(text.strip())
+                if self.post_process is not None:
+                    text = self.post_process(text.strip(), self._texts)
                 self._texts.append(text.strip())
                 if lang and not self._lang:
                     self._lang = lang

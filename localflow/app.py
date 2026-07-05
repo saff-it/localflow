@@ -49,13 +49,14 @@ PUNCTUATION_PRIMERS = {
 }
 
 
-def _glossary_prompt(cfg: config.Config) -> str:
+def _glossary_prompt(cfg: config.Config, native_translate: bool = False) -> str:
     parts = []
     terms = list(cfg.terms) + list(cfg.replacements.values())
     if terms:
         parts.append("Glossario: " + ", ".join(terms) + ".")
-    # In translate mode the decoder writes English: prime it in English.
-    primer_lang = "en" if cfg.translate_enabled else cfg.language
+    # Only with Whisper's NATIVE translate the decoder writes English; with
+    # LLM translation the ASR still writes the spoken language.
+    primer_lang = "en" if native_translate else cfg.language
     primer = PUNCTUATION_PRIMERS.get(primer_lang)
     if primer:
         parts.append(primer)
@@ -71,9 +72,18 @@ class LocalFlowDaemon:
             self.recorder.ensure_open()  # open the mic once, up front (permission prompt included)
         except Exception as exc:
             print("⚠️  impossibile aprire il microfono: %s" % exc)
-        self.transcriber = create_transcriber(cfg, initial_prompt=_glossary_prompt(cfg), persistent=True)
-        print("ASR engine: %s" % type(self.transcriber).__name__)
         self.ollama_up = formatter.available(cfg.ollama_url)
+        # Translation strategy: LLM (turbo ASR + qwen, quality) when Ollama is
+        # up, Whisper-native (large-v3, literal) otherwise.
+        self._llm_translate = cfg.translate_enabled and cfg.translate_quality and self.ollama_up
+        native_tr = cfg.translate_enabled and not self._llm_translate
+        self.transcriber = create_transcriber(
+            cfg, initial_prompt=_glossary_prompt(cfg, native_tr), persistent=True,
+            native_translate=native_tr,
+        )
+        print("ASR engine: %s" % type(self.transcriber).__name__)
+        if cfg.translate_enabled:
+            print("Traduzione in inglese: %s" % ("LLM (%s)" % cfg.ollama_model if self._llm_translate else "nativa Whisper"))
         self.use_llm = cfg.format_enabled and self.ollama_up
         if self.use_llm:
             print("AI cleanup: on — %s via Ollama" % cfg.ollama_model)
@@ -81,7 +91,7 @@ class LocalFlowDaemon:
             print("AI cleanup: off")
         if self.ollama_up and cfg.punctuate_enabled:
             print("Punteggiatura di soccorso: on (solo su dettature lunghe senza segni)")
-        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled):
+        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate):
             threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         self._busy = threading.Lock()
         self._last_paste = 0.0
@@ -188,14 +198,22 @@ class LocalFlowDaemon:
         self.start_listener()
 
     def set_translate(self, enabled: bool) -> None:
-        """Persist + rebuild the engine in native-translate mode (any lang -> EN)."""
+        """Persist + rebuild for translate mode: LLM (turbo+qwen) if Ollama is
+        up, Whisper-native (large-v3) as fallback."""
         config.set_key("translate", "true" if enabled else "false")
         self.cfg.translate_enabled = enabled
+        self.ollama_up = formatter.available(self.cfg.ollama_url)
+        self._llm_translate = enabled and self.cfg.translate_quality and self.ollama_up
+        native_tr = enabled and not self._llm_translate
+        if self._llm_translate:
+            threading.Thread(target=formatter.warmup,
+                             args=(self.cfg.ollama_url, self.cfg.ollama_model), daemon=True).start()
         with self._busy:
             self.status = "cambio modalità..."
             old = self.transcriber
             self.transcriber = create_transcriber(
-                self.cfg, initial_prompt=_glossary_prompt(self.cfg), persistent=True
+                self.cfg, initial_prompt=_glossary_prompt(self.cfg, native_tr), persistent=True,
+                native_translate=native_tr,
             )
             if hasattr(old, "close"):
                 old.close()
@@ -261,9 +279,11 @@ class LocalFlowDaemon:
             if self._use_streaming():
                 self._monitor_stop.set()  # belt: no stray monitor may survive
                 self._monitor_stop = threading.Event()
+                chunk_s = max(self.cfg.chunk_seconds, 10.0) if self._llm_translate else self.cfg.chunk_seconds
                 session = streaming.StreamingSession(
-                    self.transcriber, self.cfg.sample_rate, self.cfg.chunk_seconds,
+                    self.transcriber, self.cfg.sample_rate, chunk_s,
                     base_prompt=_glossary_prompt(self.cfg),
+                    post_process=self._translate_chunk if self._llm_translate else None,
                 )
                 if not still_held():  # paranoia pays: released during setup
                     session.abort()
@@ -326,6 +346,11 @@ class LocalFlowDaemon:
         except Exception:
             pass  # debugging aid must never break dictation
 
+    def _translate_chunk(self, text, done_texts):
+        """Per-chunk LLM translation, overlapped with the user's speech."""
+        context = " ".join(done_texts)[-200:].strip()
+        return formatter.translate_text(text, self.cfg.ollama_url, self.cfg.ollama_model, context=context)
+
     def _process(self, clip, duration, app_name, copy_mode=False, session=None, editable=True):
         cfg = self.cfg
         started = time.time()
@@ -365,6 +390,10 @@ class LocalFlowDaemon:
             lang = results[0][1]
         elif cfg.debug_keep_audio:
             self._save_debug_clip(clip)
+        if self._llm_translate and not streamed and text:
+            # Short/batch dictations: translate the whole text in one shot
+            # (streamed chunks were already translated on the fly).
+            text = formatter.translate_text(text, cfg.ollama_url, cfg.ollama_model)
         asr_secs = time.time() - started  # in streaming = attesa percepita al rilascio
         self._mark_engine_use()
         text = textproc.tidy(text)

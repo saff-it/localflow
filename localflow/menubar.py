@@ -74,6 +74,8 @@ class LocalFlowMenuApp(rumps.App):
         self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
         self.translate_item = rumps.MenuItem("Traduci in inglese (parli IT, esce EN)", callback=self._toggle_translate)
         self.translate_item.state = 1 if cfg.translate_enabled else 0
+        self.trquality_item = rumps.MenuItem("   └ Qualità AI (inglese naturale, più lenta)", callback=self._toggle_trquality)
+        self.trquality_item.state = 1 if cfg.translate_quality else 0
         self.stream_item = rumps.MenuItem("Streaming (trascrive mentre parli)", callback=self._toggle_streaming)
         self.stream_item.state = 1 if cfg.streaming_enabled else 0
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
@@ -84,7 +86,8 @@ class LocalFlowMenuApp(rumps.App):
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.copykey_menu, self.translate_item, self.stream_item, self.polish_item, None, recent, None,
+                     self.copykey_menu, self.translate_item, self.trquality_item, self.stream_item,
+                     self.polish_item, None, recent, None,
                      self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
@@ -188,6 +191,15 @@ class LocalFlowMenuApp(rumps.App):
             return
         item.state = 0 if item.state else 1
         threading.Thread(target=self.daemon.set_translate, args=(bool(item.state),), daemon=True).start()
+
+    def _toggle_trquality(self, item):
+        if self.daemon is None:
+            return
+        item.state = 0 if item.state else 1
+        config.set_key("translate_quality", "true" if item.state else "false")
+        self.daemon.cfg.translate_quality = bool(item.state)
+        if self.daemon.cfg.translate_enabled:  # re-apply the active mode
+            threading.Thread(target=self.daemon.set_translate, args=(True,), daemon=True).start()
 
     def _toggle_streaming(self, item):
         if self.daemon is None:
