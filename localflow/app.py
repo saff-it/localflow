@@ -54,7 +54,9 @@ def _glossary_prompt(cfg: config.Config) -> str:
     terms = list(cfg.terms) + list(cfg.replacements.values())
     if terms:
         parts.append("Glossario: " + ", ".join(terms) + ".")
-    primer = PUNCTUATION_PRIMERS.get(cfg.language)
+    # In translate mode the decoder writes English: prime it in English.
+    primer_lang = "en" if cfg.translate_enabled else cfg.language
+    primer = PUNCTUATION_PRIMERS.get(primer_lang)
     if primer:
         parts.append(primer)
     return " ".join(parts)
@@ -184,6 +186,20 @@ class LocalFlowDaemon:
             self._listener.stop()
             self._listener = None
         self.start_listener()
+
+    def set_translate(self, enabled: bool) -> None:
+        """Persist + rebuild the engine in native-translate mode (any lang -> EN)."""
+        config.set_key("translate", "true" if enabled else "false")
+        self.cfg.translate_enabled = enabled
+        with self._busy:
+            self.status = "cambio modalità..."
+            old = self.transcriber
+            self.transcriber = create_transcriber(
+                self.cfg, initial_prompt=_glossary_prompt(self.cfg), persistent=True
+            )
+            if hasattr(old, "close"):
+                old.close()
+            self.status = "pronto"
 
     def set_streaming(self, enabled: bool) -> None:
         config.set_key("streaming", "true" if enabled else "false")

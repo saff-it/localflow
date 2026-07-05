@@ -67,7 +67,9 @@ class WhisperCppTranscriber:
         initial_prompt: str = "",
         binary: Optional[str] = None,
         beam_size: int = 5,
+        translate: bool = False,
     ):
+        self.translate = translate
         self.binary = binary or find_binary()
         if self.binary is None:
             raise RuntimeError("whisper-cli not found (brew install whisper-cpp)")
@@ -92,6 +94,8 @@ class WhisperCppTranscriber:
         ]  # flash attention is on by default in current whisper.cpp
         if self.beam_size > 1:  # nearly free on GPU: turbo's decoder is tiny
             cmd += ["-bs", str(self.beam_size)]
+        if self.translate:  # Whisper's native any-language -> English task
+            cmd += ["--translate"]
         if effective_prompt:
             cmd += ["--prompt", effective_prompt]
         try:
@@ -114,7 +118,8 @@ class WhisperCppServer:
 
     supports_streaming = True  # resident model = chunks can be transcribed live
 
-    def __init__(self, model_name: str, language: str = "", initial_prompt: str = "", beam_size: int = 5):
+    def __init__(self, model_name: str, language: str = "", initial_prompt: str = "",
+                 beam_size: int = 5, translate: bool = False):
         binary = find_binary("whisper-server")
         if binary is None:
             raise RuntimeError("whisper-server not found (brew install whisper-cpp)")
@@ -123,6 +128,7 @@ class WhisperCppServer:
             raise RuntimeError("ggml model missing: %s (run: localflow download ggml:%s)" % (model_path, model_name))
         self.language = language or "auto"
         self.initial_prompt = initial_prompt
+        self.translate = translate  # applied per-request: the server ignores a startup -tr
         extra = ["-bs", str(beam_size)] if beam_size > 1 else []
         with socket.socket() as probe:  # grab a free ephemeral port
             probe.bind(("127.0.0.1", 0))
@@ -155,6 +161,8 @@ class WhisperCppServer:
 
         source, tmp_path = _as_wav(audio, sample_rate)
         data = {"temperature": "0.0", "response_format": "json"}
+        if self.translate:
+            data["translate"] = "true"
         effective_prompt = prompt if prompt is not None else self.initial_prompt
         if effective_prompt:
             data["prompt"] = effective_prompt
