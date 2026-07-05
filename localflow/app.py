@@ -71,7 +71,33 @@ class LocalFlowDaemon:
         self._busy = threading.Lock()
         self._last_paste = 0.0
         self._listener = None
+        threading.Thread(target=self._wake_watch, daemon=True).start()
         self.status = "pronto"
+
+    def _wake_watch(self):
+        """After standby macOS evicts the model from RAM/GPU: the first dictation
+        paid ~7s of reload. Detect the wall-clock jump of a wake-up and re-warm
+        the engine in the background before the user dictates."""
+        last = time.time()
+        while True:
+            time.sleep(30)
+            now = time.time()
+            if now - last > 120:  # the Mac was asleep
+                threading.Thread(target=self._warm_engine, daemon=True).start()
+            last = now
+
+    def _warm_engine(self):
+        if not self._busy.acquire(False):  # never delay a real dictation
+            return
+        try:
+            import numpy as np
+
+            self.transcriber.transcribe(np.zeros(int(0.5 * self.cfg.sample_rate), dtype=np.float32))
+            print("(motore riscaldato dopo lo standby)")
+        except Exception:
+            pass
+        finally:
+            self._busy.release()
 
     # -- runtime switches (called from the menu bar) --------------------------
 
