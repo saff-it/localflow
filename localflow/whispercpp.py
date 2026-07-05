@@ -163,6 +163,9 @@ class WhisperCppServer:
         data = {"temperature": "0.0", "response_format": "json"}
         if self.translate:
             data["translate"] = "true"
+        # NOTE: per-request "audio_ctx" is POISON on whisper-server — it leaks
+        # into the shared context and desyncs responses across requests
+        # (request N answered with request N-1's text). Tested 6 Jul, reverted.
         effective_prompt = prompt if prompt is not None else self.initial_prompt
         if effective_prompt:
             data["prompt"] = effective_prompt
