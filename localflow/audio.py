@@ -11,9 +11,12 @@ from typing import List, Optional
 import numpy as np
 
 
-# Calibrated on the user's real mic (4 Jul black-box clips): true speech peaks
-# at frame-RMS >= 0.029, silent key-presses stay <= 0.011.
-MIN_SPEECH_RMS = 0.015
+# Calibrated twice on the user's real mic: daytime voice peaks >= 0.029, but
+# LATE-NIGHT WHISPERED dictation sits at 0.016-0.022 with sustained windows
+# at 0.010+ (7-14 hot), while the key-click ghost lights only 1-3 windows at
+# any threshold. The sustained-count rule is the click killer; the RMS floor
+# just needs to sit under quiet speech. Overridable via config min_speech_rms.
+MIN_SPEECH_RMS = 0.010
 
 
 def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
@@ -21,11 +24,12 @@ def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
     50ms hop (~250ms cumulative). A single loud transient — the mechanical
     key click that fooled the first single-frame gate into 'Grazie a tutti' —
     lights up 1-3 windows; real voice starts at 7+ (measured on the user's mic)."""
+    threshold = MIN_SPEECH_RMS
     frame = int(0.1 * sample_rate)
     hop = frame // 2
     hot = 0
     for i in range(0, max(1, len(clip) - frame), hop):
-        if float(np.sqrt(np.mean(clip[i:i + frame] ** 2))) >= MIN_SPEECH_RMS:
+        if float(np.sqrt(np.mean(clip[i:i + frame] ** 2))) >= threshold:
             hot += 1
             if hot >= 5:
                 return True

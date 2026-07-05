@@ -67,6 +67,7 @@ class LocalFlowDaemon:
     def __init__(self, cfg: config.Config):
         self.cfg = cfg
         self.status = "avvio..."
+        audio.MIN_SPEECH_RMS = cfg.min_speech_rms  # gate threshold, user-tunable
         self.recorder = audio.Recorder(cfg.sample_rate, cfg.device or None, cfg.mic_release_seconds)
         try:
             self.recorder.ensure_open()  # open the mic once, up front (permission prompt included)
