@@ -16,6 +16,7 @@ from .transcriber import create_transcriber
 SOUND_START = "/System/Library/Sounds/Pop.aiff"
 SOUND_DONE = "/System/Library/Sounds/Glass.aiff"
 SOUND_COPY = "/System/Library/Sounds/Tink.aiff"
+SOUND_WRONG = "/System/Library/Sounds/Basso.aiff"
 
 MIN_UTTERANCE_SECONDS = 0.3  # shorter than this = accidental tap, skip (also kills silence hallucinations)
 
@@ -218,6 +219,13 @@ class LocalFlowDaemon:
         self._copy_mode = copy_mode
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
+            if not copy_mode and not inject.focused_is_editable():
+                # Paste key pressed outside a text field: warn, don't record.
+                # (The copy key keeps working everywhere — that's its job.)
+                _play(SOUND_WRONG, self.cfg.sounds)
+                print("(non sei in un campo di testo: dettatura non avviata — usa il tasto copia per dettare ovunque)")
+                self._copy_mode = None  # tells _on_stop to ignore this hold
+                return
             try:   # call here used to kill the hotkey for good
                 self.recorder.start()
             except Exception as exc:
@@ -239,6 +247,8 @@ class LocalFlowDaemon:
         threading.Thread(target=go, daemon=True).start()
 
     def _on_stop(self):
+        if getattr(self, "_copy_mode", False) is None:  # hold refused at start
+            return
         session, self._session = self._session, None
         if session is not None:
             self._monitor_stop.set()

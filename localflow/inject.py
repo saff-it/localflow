@@ -41,6 +41,28 @@ def frontmost_app() -> str:
     return result.stdout.strip()
 
 
+def focused_is_editable() -> bool:
+    """True if the focused UI element looks like a text field. FAIL-OPEN: any
+    doubt (apps with poor accessibility exposure) returns True — dictation must
+    never be blocked by a lazy app; we only stop when it's clearly not a field."""
+    try:
+        import ApplicationServices as AS  # already present: pynput depends on it
+
+        system = AS.AXUIElementCreateSystemWide()
+        err, focused = AS.AXUIElementCopyAttributeValue(system, AS.kAXFocusedUIElementAttribute, None)
+        if err != 0 or focused is None:
+            return True
+        err, role = AS.AXUIElementCopyAttributeValue(focused, AS.kAXRoleAttribute, None)
+        if err == 0 and role in ("AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"):
+            return True
+        err, names = AS.AXUIElementCopyAttributeNames(focused, None)
+        if err == 0 and names is not None and "AXSelectedTextRange" in list(names):
+            return True  # editable/selectable text views expose a selection range
+        return False
+    except Exception:
+        return True
+
+
 def _paste_keystroke_quartz() -> bool:
     """Native ⌘V via CGEvent: ~10ms vs ~250ms of an osascript spawn."""
     try:
