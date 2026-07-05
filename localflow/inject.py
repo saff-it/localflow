@@ -5,6 +5,7 @@ Privacy & Security → Accessibility). If the paste keystroke is blocked, the di
 is still on the clipboard — nothing is lost.
 """
 import subprocess
+import threading
 import time
 from typing import Optional
 
@@ -15,12 +16,24 @@ _FRONTMOST_SCRIPT = (
 
 
 def get_clipboard() -> str:
-    result = subprocess.run(["pbpaste"], capture_output=True)
-    return result.stdout.decode("utf-8", "replace")
+    try:  # in-process NSPasteboard: instant, no pbpaste spawn
+        from AppKit import NSPasteboard, NSPasteboardTypeString
+
+        return NSPasteboard.generalPasteboard().stringForType_(NSPasteboardTypeString) or ""
+    except Exception:
+        result = subprocess.run(["pbpaste"], capture_output=True)
+        return result.stdout.decode("utf-8", "replace")
 
 
 def set_clipboard(text: str) -> None:
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+    try:
+        from AppKit import NSPasteboard, NSPasteboardTypeString
+
+        board = NSPasteboard.generalPasteboard()
+        board.clearContents()
+        board.setString_forType_(text, NSPasteboardTypeString)
+    except Exception:
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"))
 
 
 def frontmost_app() -> str:
@@ -43,13 +56,23 @@ def _paste_keystroke_quartz() -> bool:
         return False
 
 
+def _restore_later(previous: str) -> None:
+    """Put the old clipboard back AFTER the paste has landed — in the background,
+    so the done-sound isn't delayed by this bookkeeping."""
+
+    def restore():
+        time.sleep(0.5)
+        set_clipboard(previous)
+
+    threading.Thread(target=restore, daemon=True).start()
+
+
 def paste_into_frontmost(text: str, restore_clipboard: bool = True) -> bool:
     previous: Optional[str] = get_clipboard() if restore_clipboard else None
     set_clipboard(text)
     if _paste_keystroke_quartz():
         if previous is not None:
-            time.sleep(0.5)  # let the paste land before the old clipboard comes back
-            set_clipboard(previous)
+            _restore_later(previous)
         return True
     result = subprocess.run(["osascript", "-e", _PASTE_SCRIPT], capture_output=True, text=True)
     if result.returncode != 0:
@@ -61,6 +84,5 @@ def paste_into_frontmost(text: str, restore_clipboard: bool = True) -> bool:
             print("    Dettaglio macOS: " + result.stderr.strip().splitlines()[-1])
         return False
     if previous is not None:
-        time.sleep(0.5)  # let the paste land before the old clipboard comes back
-        set_clipboard(previous)
+        _restore_later(previous)
     return True
