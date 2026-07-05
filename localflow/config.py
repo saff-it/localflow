@@ -21,6 +21,7 @@ DEFAULT_CONFIG = """\
 # The fn key cannot be captured from Python — that one needs a native event tap (see roadmap).
 key = "alt_r"
 copy_key = ""          # secondo tasto: detta e COPIA negli appunti senza incollare ("" = disattivato)
+assistant_key = "cmd_l"  # terzo tasto: parla con l'assistente vocale ("" = disattivato)
 
 [audio]
 sample_rate = 16000
@@ -41,9 +42,15 @@ translate_quality = true   # true = traduzione AI (inglese naturale, ~6-9s); fal
 streaming = true       # trascrivi MENTRE parli: al rilascio resta solo la coda (~1s di attesa)
 chunk_seconds = 7      # dimensione dei blocchi trascritti in corsa (tagliati nelle tue pause)
 
+[assistant]
+enabled = true         # assistente vocale locale (risponde a voce); richiede Ollama
+voice = "Alice"        # voce macOS per la risposta parlata (say -v ?); "" = voce di sistema
+rate = 0               # velocità voce (parole/min); 0 = predefinita
+
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
 punctuate = false      # rescue pass on long unpunctuated dictations — costs ~5GB RAM parked for the LLM
+paragraphs = "auto"    # auto (paragrafi solo fuori dalle chat) | always | never — spezza testi lunghi in paragrafi/elenchi
 ollama_url = "http://127.0.0.1:11434"
 ollama_model = "llama3.2:3b"
 app_aware_tone = true  # tell the LLM which app the text is being pasted into
@@ -67,6 +74,10 @@ sounds = true            # feedback sounds on record start / text ready
 class Config:
     hotkey: str = "alt_r"
     copy_hotkey: str = ""
+    assistant_key: str = "cmd_l"
+    assistant_enabled: bool = True
+    assistant_voice: str = "Alice"
+    assistant_rate: int = 0
     sample_rate: int = 16000
     device: str = ""
     mic_release_seconds: float = 300.0
@@ -84,6 +95,7 @@ class Config:
     chunk_seconds: float = 7.0
     format_enabled: bool = True
     punctuate_enabled: bool = False
+    paragraphs: str = "auto"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
     app_aware_tone: bool = True
@@ -113,6 +125,12 @@ def load() -> Config:
     hk = data.get("hotkey", {})
     cfg.hotkey = hk.get("key", cfg.hotkey)
     cfg.copy_hotkey = hk.get("copy_key", cfg.copy_hotkey)
+    cfg.assistant_key = hk.get("assistant_key", cfg.assistant_key)
+
+    asst = data.get("assistant", {})
+    cfg.assistant_enabled = bool(asst.get("enabled", cfg.assistant_enabled))
+    cfg.assistant_voice = asst.get("voice", cfg.assistant_voice)
+    cfg.assistant_rate = int(asst.get("rate", cfg.assistant_rate))
 
     au = data.get("audio", {})
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))
@@ -136,6 +154,7 @@ def load() -> Config:
     fmt = data.get("format", {})
     cfg.format_enabled = bool(fmt.get("enabled", cfg.format_enabled))
     cfg.punctuate_enabled = bool(fmt.get("punctuate", cfg.punctuate_enabled))
+    cfg.paragraphs = fmt.get("paragraphs", cfg.paragraphs)
     cfg.ollama_url = fmt.get("ollama_url", cfg.ollama_url).rstrip("/")
     cfg.ollama_model = fmt.get("ollama_model", cfg.ollama_model)
     cfg.app_aware_tone = bool(fmt.get("app_aware_tone", cfg.app_aware_tone))

@@ -30,6 +30,17 @@ HOTKEYS = [
     ("F13", "f13"),
 ]
 COPY_HOTKEYS = [("Disattivato", "")] + HOTKEYS
+ASSISTANT_KEYS = [
+    ("Disattivato", ""),
+    ("⌘ Command sinistro", "cmd_l"),
+    ("⌃ Control sinistro", "ctrl_l"),
+    ("F14", "f14"),
+]
+PARAGRAPHS = [
+    ("Auto (fuori dalle chat)", "auto"),
+    ("Sempre", "always"),
+    ("Mai", "never"),
+]
 TRANSLATIONS = [
     ("Spenta", "off"),
     ("🇬🇧 Inglese AI (qualità)", "en_ai"),
@@ -88,13 +99,32 @@ class LocalFlowMenuApp(rumps.App):
             self.translation_items[code] = item
             translation_menu.add(item)
         self.translation_menu = translation_menu
+        self.para_items = {}
+        para_menu = rumps.MenuItem("Paragrafi automatici")
+        for label, code in PARAGRAPHS:
+            item = rumps.MenuItem(label, callback=self._make_para_cb(code))
+            item.state = 1 if cfg.paragraphs == code else 0
+            self.para_items[code] = item
+            para_menu.add(item)
+        self.para_menu = para_menu
+        self.asst_items = {}
+        asst_menu = rumps.MenuItem("Assistente vocale")
+        for label, code in ASSISTANT_KEYS:
+            item = rumps.MenuItem(label, callback=self._make_asst_cb(code))
+            active = cfg.assistant_key if cfg.assistant_enabled else ""
+            item.state = 1 if code == active else 0
+            self.asst_items[code] = item
+            asst_menu.add(item)
+        asst_menu.add(rumps.separator)
+        asst_menu.add(rumps.MenuItem("Nuova conversazione", callback=self._new_conversation))
+        self.asst_menu = asst_menu
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.copykey_menu, self.translation_menu, None, recent, None,
+                     self.copykey_menu, self.translation_menu, self.para_menu, self.asst_menu, None, recent, None,
                      self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
@@ -192,6 +222,30 @@ class LocalFlowMenuApp(rumps.App):
         else:
             item.title = "⏻ Accendi microfono"
             threading.Thread(target=self.daemon.pause, daemon=True).start()
+
+    def _make_para_cb(self, code):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for c, item in self.para_items.items():
+                item.state = 1 if c == code else 0
+            config.set_key("paragraphs", '"%s"' % code)
+            self.daemon.cfg.paragraphs = code
+        return cb
+
+    def _make_asst_cb(self, code):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for c, item in self.asst_items.items():
+                item.state = 1 if c == code else 0
+            threading.Thread(target=self.daemon.set_assistant_key, args=(code,), daemon=True).start()
+        return cb
+
+    def _new_conversation(self, _item):
+        if self.daemon is not None:
+            self.daemon.new_conversation()
+            rumps.notification("LocalFlow", "Assistente", "Nuova conversazione iniziata.")
 
     def _make_translation_cb(self, code):
         def cb(_item):

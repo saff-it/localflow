@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 
+from . import assistant as assistant_mod
 from . import audio, config, formatter, hotkey, inject, streaming, textproc
 from .transcriber import create_transcriber
 
@@ -19,6 +20,11 @@ SOUND_COPY = "/System/Library/Sounds/Tink.aiff"
 SOUND_WRONG = "/System/Library/Sounds/Basso.aiff"
 
 MIN_UTTERANCE_SECONDS = 0.3  # shorter than this = accidental tap, skip (also kills silence hallucinations)
+
+# Chat apps where a single compact block is the norm: "auto" paragraphs skips them.
+COMPACT_APPS = {
+    "WhatsApp", "Messages", "Telegram", "Slack", "Discord", "Signal", "Messenger", "iMessage",
+}
 
 
 _sounds = {}
@@ -92,13 +98,18 @@ class LocalFlowDaemon:
             print("AI cleanup: off")
         if self.ollama_up and cfg.punctuate_enabled:
             print("Punteggiatura di soccorso: on (solo su dettature lunghe senza segni)")
-        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate):
+        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate
+                               or cfg.paragraphs != "never"):
             threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         self._busy = threading.Lock()
         self._last_paste = 0.0
         self._listener = None
         self._session = None
         self._monitor_stop = threading.Event()
+        self.assistant = assistant_mod.Assistant(cfg.ollama_url, cfg.ollama_model,
+                                                 voice=cfg.assistant_voice, rate=cfg.assistant_rate)
+        if cfg.assistant_enabled:
+            print("Assistente vocale: on — tieni premuto '%s', chiedi, rilascia" % cfg.assistant_key)
         if cfg.streaming_enabled and getattr(self.transcriber, "supports_streaming", False):
             print("Streaming: on — trascrivo mentre parli (blocchi da %.0fs)" % cfg.chunk_seconds)
         threading.Thread(target=self._wake_watch, daemon=True).start()
@@ -257,8 +268,21 @@ class LocalFlowDaemon:
                 print("⚠️  streaming feed: %s" % exc)
                 break
 
-    def _on_start(self, copy_mode=False):
-        self._copy_mode = copy_mode
+    def _cancel_hold(self):
+        """A modifier shortcut (⌘C etc) used the assistant key: abort silently."""
+        self._holding = False
+        self._cancelled = True
+        try:
+            self.recorder.stop()
+        except Exception:
+            pass
+
+    def _on_start(self, mode="paste"):
+        self._mode = mode
+        self._copy_mode = mode == "copy"
+        self._cancelled = False
+        if mode == "assistant":
+            self.assistant.stop_speaking()  # re-press = barge-in: shut it up first
         self._hold_seq = getattr(self, "_hold_seq", 0) + 1
         self._holding = True
         hold_id = self._hold_seq
@@ -267,7 +291,14 @@ class LocalFlowDaemon:
             return self._holding and self._hold_seq == hold_id
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
-            # NOTHING may run before the recorder: any pre-check (AX focus
+            # cmd_l doubles as ⌘C/⌘V/⌘Tab: a 300ms arming delay means quick
+            # shortcuts never reach the mic (they get cancelled first), so no
+            # Pop and no recording on every keyboard shortcut.
+            if mode == "assistant":
+                time.sleep(0.3)
+                if not still_held() or getattr(self, "_cancelled", False):
+                    return
+            # NOTHING else may run before the recorder: any pre-check (AX focus
             # queries can take ~0.75s on Electron apps) delays the mic past
             # the user's first words. The focus check moved to release time.
             if not still_held():
@@ -284,7 +315,7 @@ class LocalFlowDaemon:
             # reopening after a long break, the sound arrives late but honest —
             # no syllables spoken into a mic that wasn't there yet.
             _play(SOUND_START, self.cfg.sounds)
-            if self._use_streaming():
+            if mode in ("paste", "copy") and self._use_streaming():
                 self._monitor_stop.set()  # belt: no stray monitor may survive
                 self._monitor_stop = threading.Event()
                 chunk_s = max(self.cfg.chunk_seconds, 10.0) if self._llm_translate else self.cfg.chunk_seconds
@@ -305,6 +336,12 @@ class LocalFlowDaemon:
 
     def _on_stop(self):
         self._holding = False  # any late go() for this hold now aborts itself
+        if getattr(self, "_cancelled", False):  # shortcut used the assistant key
+            self._cancelled = False
+            if self._session is not None:
+                self._session.abort()
+                self._session = None
+            return
         session, self._session = self._session, None
         if session is not None:
             self._monitor_stop.set()
@@ -320,7 +357,21 @@ class LocalFlowDaemon:
                 threading.Thread(target=self.recorder.reopen, daemon=True).start()
             return
 
-        copy_mode = getattr(self, "_copy_mode", False)
+        mode = getattr(self, "_mode", "paste")
+        copy_mode = mode == "copy"
+
+        if mode == "assistant":
+            def ask():
+                with self._busy:
+                    self.status = "penso..."
+                    try:
+                        self._assistant_process(clip, duration)
+                    except Exception as exc:
+                        print("⚠️  errore assistente: %s" % exc)
+                    finally:
+                        self.status = "pronto"
+            threading.Thread(target=ask, daemon=True).start()
+            return
 
         def work():
             app_name = inject.frontmost_app()  # where the user was at key release
@@ -353,6 +404,40 @@ class LocalFlowDaemon:
                 old.unlink()
         except Exception:
             pass  # debugging aid must never break dictation
+
+    def _assistant_process(self, clip, duration):
+        cfg = self.cfg
+        if not audio.has_speech(clip, cfg.sample_rate):
+            print("(assistente: nessuna domanda rilevata)")
+            return
+        if not formatter.available(cfg.ollama_url):
+            _play(SOUND_WRONG, cfg.sounds)
+            print("⚠️  assistente non disponibile: Ollama spento (brew services start ollama)")
+            return
+        pieces = audio.split_on_silence(clip, cfg.sample_rate)
+        question = textproc.tidy(textproc.join_chunks(self.transcriber.transcribe(p)[0] for p in pieces))
+        self._mark_engine_use()
+        if not question:
+            return
+        print("🎙️  %s" % question)
+        answer = self.assistant.ask(question)
+        inject.set_clipboard(answer)  # answer also on the clipboard, to paste if wanted
+        _play(SOUND_DONE, cfg.sounds)
+        print("🤖 %s" % answer)
+        self.assistant.speak(answer)
+
+    def new_conversation(self) -> None:
+        self.assistant.reset()
+        print("(assistente: nuova conversazione)")
+
+    def _maybe_paragraphs(self, text, app_name):
+        """Reflow into paragraphs/bullets when the mode and app call for it."""
+        mode = self.cfg.paragraphs
+        if mode == "never" or not self.ollama_up or not formatter.needs_paragraphs(text):
+            return text
+        if mode == "auto" and app_name in COMPACT_APPS:
+            return text  # chat apps stay compact
+        return formatter.format_paragraphs(text, self.cfg.ollama_url, self.cfg.ollama_model)
 
     def _translate_chunk(self, text, done_texts):
         """Per-chunk LLM translation, overlapped with the user's speech."""
@@ -422,6 +507,7 @@ class LocalFlowDaemon:
             text = formatter.punctuate(text, cfg.ollama_url, cfg.ollama_model)
         llm_secs = time.time() - llm_started
         text = textproc.apply_dictionary(text, cfg.replacements)
+        text = self._maybe_paragraphs(text, app_name)
         if copy_mode:  # copy hotkey: clipboard only, paste it wherever you like
             inject.set_clipboard(text)
             _play(SOUND_COPY, cfg.sounds)
@@ -460,21 +546,49 @@ class LocalFlowDaemon:
         from pynput import keyboard
 
         holders = [hotkey.HoldToTalk(hotkey.parse_key(self.cfg.hotkey),
-                                     partial(self._on_start, False), self._on_stop)]
+                                     partial(self._on_start, "paste"), self._on_stop)]
         if self.cfg.copy_hotkey and self.cfg.copy_hotkey != self.cfg.hotkey:
             holders.append(hotkey.HoldToTalk(hotkey.parse_key(self.cfg.copy_hotkey),
-                                             partial(self._on_start, True), self._on_stop))
+                                             partial(self._on_start, "copy"), self._on_stop))
+
+        # The assistant key gets a combo-cancel guard: if any OTHER key is
+        # pressed while it's held, it was a shortcut (⌘C etc), not a question.
+        asst_key = None
+        if self.cfg.assistant_enabled and self.cfg.assistant_key:
+            asst_key = hotkey.parse_key(self.cfg.assistant_key)
+        asst_holder = (hotkey.HoldToTalk(asst_key, partial(self._on_start, "assistant"), self._on_stop)
+                       if asst_key is not None else None)
+        state = {"asst_down": False}
 
         def on_press(key):
             for holder in holders:
                 holder._on_press(key)
+            if asst_holder is not None:
+                if key == asst_key:
+                    state["asst_down"] = True
+                elif state["asst_down"]:
+                    self._cancel_hold()  # another key while assistant held = shortcut
+                asst_holder._on_press(key)
 
         def on_release(key):
             for holder in holders:
                 holder._on_release(key)
+            if asst_holder is not None:
+                if key == asst_key:
+                    state["asst_down"] = False
+                asst_holder._on_release(key)
 
         self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)
         self._listener.start()
+
+    def set_assistant_key(self, key_name: str) -> None:
+        config.set_key("assistant_key", '"%s"' % key_name)
+        self.cfg.assistant_key = key_name
+        self.cfg.assistant_enabled = bool(key_name)
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
+        self.start_listener()
 
     def shutdown(self) -> None:
         if self._listener is not None:

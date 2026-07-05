@@ -1,6 +1,6 @@
 import unittest
 
-from localflow.formatter import _words_match, needs_punctuation
+from localflow.formatter import _structural_only, _words_match, needs_paragraphs, needs_punctuation
 
 
 class NeedsPunctuationTests(unittest.TestCase):
@@ -46,6 +46,36 @@ class WordsMatchTests(unittest.TestCase):
             "qual è lo step success ivo per arrivare al live llo giusto",
             "Qual è lo step successivo per arrivare al livello giusto?",
         ))
+
+
+class NeedsParagraphsTests(unittest.TestCase):
+    def test_short_skips(self):
+        self.assertFalse(needs_paragraphs("ciao come stai, tutto bene?"))
+
+    def test_long_single_block_triggers(self):
+        self.assertTrue(needs_paragraphs("parola " * 60))
+
+    def test_already_multiline_skips(self):
+        self.assertFalse(needs_paragraphs("riga uno\n\nriga due " + "parola " * 60))
+
+
+class StructuralGuardTests(unittest.TestCase):
+    def test_pure_paragraph_break_allowed(self):
+        self.assertTrue(_structural_only("primo blocco. secondo blocco.", "Primo blocco.\n\nSecondo blocco."))
+
+    def test_bullets_dropping_ordinal_cues_allowed(self):
+        self.assertTrue(_structural_only(
+            "le cose sono tre primo latte secondo pane terzo uova",
+            "Le cose sono tre:\n- latte\n- pane\n- uova"))
+
+    def test_changed_word_rejected(self):
+        self.assertFalse(_structural_only("mando il preventivo domani", "Mando la fattura domani"))
+
+    def test_added_word_rejected(self):
+        self.assertFalse(_structural_only("ci vediamo giovedì", "Ci vediamo giovedì mattina"))
+
+    def test_dropping_a_content_word_rejected(self):
+        self.assertFalse(_structural_only("comprare il latte fresco", "- comprare il latte"))
 
 
 if __name__ == "__main__":
