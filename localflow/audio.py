@@ -17,12 +17,18 @@ MIN_SPEECH_RMS = 0.015
 
 
 def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
-    """True if at least one 100 ms frame reaches speech-level energy — the gate
-    that stops Whisper from hallucinating 'grazie mille' on silence."""
+    """True only with SUSTAINED speech-level energy: >=5 hot 100ms windows at
+    50ms hop (~250ms cumulative). A single loud transient — the mechanical
+    key click that fooled the first single-frame gate into 'Grazie a tutti' —
+    lights up 1-3 windows; real voice starts at 7+ (measured on the user's mic)."""
     frame = int(0.1 * sample_rate)
-    for i in range(0, max(1, len(clip) - frame), frame):
+    hop = frame // 2
+    hot = 0
+    for i in range(0, max(1, len(clip) - frame), hop):
         if float(np.sqrt(np.mean(clip[i:i + frame] ** 2))) >= MIN_SPEECH_RMS:
-            return True
+            hot += 1
+            if hot >= 5:
+                return True
     return False
 
 
