@@ -79,16 +79,24 @@ class LocalFlowDaemon:
         self.status = "pronto"
 
     def _wake_watch(self):
-        """After standby macOS evicts the model from RAM/GPU: the first dictation
-        paid ~7s of reload. Detect the wall-clock jump of a wake-up and re-warm
-        the engine in the background before the user dictates."""
+        """Keep the engine hot. Two enemies: (1) standby evicts the model from
+        RAM (first dictation paid ~7s); (2) Metal releases GPU buffers after
+        180s idle (first dictation after a few minutes pays ~1-2s). Cure: warm
+        after a wall-clock jump AND heartbeat every ~150s of idle — a 0.5s
+        silent inference, ~0.02W average, negligible on battery."""
         last = time.time()
+        self._last_engine_use = time.time()
         while True:
             time.sleep(30)
             now = time.time()
-            if now - last > 120:  # the Mac was asleep
+            slept = now - last > 120
+            idle = now - self._last_engine_use > 150
+            if slept or idle:
                 threading.Thread(target=self._warm_engine, daemon=True).start()
             last = now
+
+    def _mark_engine_use(self):
+        self._last_engine_use = time.time()
 
     def _warm_engine(self):
         if not self._busy.acquire(False):  # never delay a real dictation
@@ -97,7 +105,7 @@ class LocalFlowDaemon:
             import numpy as np
 
             self.transcriber.transcribe(np.zeros(int(0.5 * self.cfg.sample_rate), dtype=np.float32))
-            print("(motore riscaldato dopo lo standby)")
+            self._mark_engine_use()
         except Exception:
             pass
         finally:
@@ -298,6 +306,7 @@ class LocalFlowDaemon:
         elif cfg.debug_keep_audio:
             self._save_debug_clip(clip)
         asr_secs = time.time() - started  # in streaming = attesa percepita al rilascio
+        self._mark_engine_use()
         text = textproc.tidy(text)
         if not text:
             return
