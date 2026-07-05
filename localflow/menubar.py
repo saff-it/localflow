@@ -34,7 +34,7 @@ TRANSLATIONS = [
     ("Spenta", "off"),
     ("🇬🇧 Inglese AI (qualità)", "en_ai"),
     ("🇬🇧 Inglese veloce (letterale)", "en_fast"),
-    ("🇪🇸 Spagnolo", "Spanish"),
+    ("🇦🇷 Spagnolo argentino", "Argentine Spanish (Rioplatense, with voseo)"),
     ("🇫🇷 Francese", "French"),
     ("🇩🇪 Tedesco", "German"),
 ]
