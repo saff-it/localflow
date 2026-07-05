@@ -16,7 +16,7 @@ import numpy as np
 # at 0.010+ (7-14 hot), while the key-click ghost lights only 1-3 windows at
 # any threshold. The sustained-count rule is the click killer; the RMS floor
 # just needs to sit under quiet speech. Overridable via config min_speech_rms.
-MIN_SPEECH_RMS = 0.010
+MIN_SPEECH_RMS = 0.006
 
 
 def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
