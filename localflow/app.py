@@ -199,9 +199,9 @@ class LocalFlowDaemon:
         self.start_listener()
 
     def set_translate(self, enabled: bool) -> None:
-        """Persist + rebuild for translate mode: LLM (turbo+qwen) if Ollama is
-        up, Whisper-native (large-v3) as fallback."""
-        config.set_key("translate", "true" if enabled else "false")
+        """SESSION-ONLY by design (not persisted): a special mode like
+        translation silently surviving a restart cost the user a confused
+        night — every boot starts in plain transcription."""
         self.cfg.translate_enabled = enabled
         self.ollama_up = formatter.available(self.cfg.ollama_url)
         self._llm_translate = enabled and self.cfg.translate_quality and self.ollama_up

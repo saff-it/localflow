@@ -75,7 +75,8 @@ class LocalFlowMenuApp(rumps.App):
         self.translate_item = rumps.MenuItem("Traduci in inglese (parli IT, esce EN)", callback=self._toggle_translate)
         self.translate_item.state = 1 if cfg.translate_enabled else 0
         self.trquality_item = rumps.MenuItem("   └ Qualità AI (inglese naturale, più lenta)", callback=self._toggle_trquality)
-        self.trquality_item.state = 1 if cfg.translate_quality else 0
+        # visually tied to its parent: checked only when translation is actually ON
+        self.trquality_item.state = 1 if (cfg.translate_enabled and cfg.translate_quality) else 0
         self.stream_item = rumps.MenuItem("Streaming (trascrive mentre parli)", callback=self._toggle_streaming)
         self.stream_item.state = 1 if cfg.streaming_enabled else 0
         self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
@@ -190,6 +191,8 @@ class LocalFlowMenuApp(rumps.App):
         if self.daemon is None:
             return
         item.state = 0 if item.state else 1
+        # keep the sub-checkbox visually coherent with its parent
+        self.trquality_item.state = 1 if (item.state and self.daemon.cfg.translate_quality) else 0
         threading.Thread(target=self.daemon.set_translate, args=(bool(item.state),), daemon=True).start()
 
     def _toggle_trquality(self, item):
