@@ -275,11 +275,27 @@ class LocalFlowDaemon:
                 print("⚠️  streaming fallito (%s): ripiego sul metodo classico" % exc)
                 clip = session.full_audio()
         if not streamed:
-            pieces = audio.split_on_silence(clip, cfg.sample_rate)
-            results = [self.transcriber.transcribe(piece) for piece in pieces]
+            if cfg.debug_keep_audio:
+                self._save_debug_clip(clip)  # save BEFORE ASR: audio never lost
+            try:
+                pieces = audio.split_on_silence(clip, cfg.sample_rate)
+                results = [self.transcriber.transcribe(piece) for piece in pieces]
+            except Exception as exc:
+                # Dead engine (crashed/restarted whisper-server): relaunch it and retry
+                # once — a dictation must survive even an engine death.
+                print("⚠️  motore non risponde (%s): lo rilancio e riprovo" % type(exc).__name__)
+                old = self.transcriber
+                self.transcriber = create_transcriber(cfg, initial_prompt=_glossary_prompt(cfg), persistent=True)
+                if hasattr(old, "close"):
+                    try:
+                        old.close()
+                    except Exception:
+                        pass
+                pieces = audio.split_on_silence(clip, cfg.sample_rate)
+                results = [self.transcriber.transcribe(piece) for piece in pieces]
             text = textproc.join_chunks(t for t, _ in results)
             lang = results[0][1]
-        if cfg.debug_keep_audio:
+        elif cfg.debug_keep_audio:
             self._save_debug_clip(clip)
         asr_secs = time.time() - started  # in streaming = attesa percepita al rilascio
         text = textproc.tidy(text)
