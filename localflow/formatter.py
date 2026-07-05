@@ -61,7 +61,7 @@ def translate_text(text: str, url: str, model: str, target: str = "English",
             json={
                 "model": model,
                 "messages": [{"role": "system", "content": TRANSLATE_PROMPT.format(target=target)}]
-                + TRANSLATE_FEW_SHOT
+                + (TRANSLATE_FEW_SHOT if target == "English" else [])  # EN examples would bias other targets
                 + [{"role": "user", "content": user}],
                 "stream": False,
                 "keep_alive": "5m",

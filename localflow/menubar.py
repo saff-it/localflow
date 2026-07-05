@@ -30,6 +30,14 @@ HOTKEYS = [
     ("F13", "f13"),
 ]
 COPY_HOTKEYS = [("Disattivato", "")] + HOTKEYS
+TRANSLATIONS = [
+    ("Spenta", "off"),
+    ("🇬🇧 Inglese AI (qualità)", "en_ai"),
+    ("🇬🇧 Inglese veloce (letterale)", "en_fast"),
+    ("🇪🇸 Spagnolo", "Spanish"),
+    ("🇫🇷 Francese", "French"),
+    ("🇩🇪 Tedesco", "German"),
+]
 PLIST = pathlib.Path.home() / "Library" / "LaunchAgents" / "com.localflow.plist"
 
 
@@ -64,7 +72,7 @@ class LocalFlowMenuApp(rumps.App):
             hotkey_menu.add(item)
         self.hotkey_menu = hotkey_menu
         self.copykey_items = {}
-        copykey_menu = rumps.MenuItem("Tasto di copia (solo appunti)")
+        copykey_menu = rumps.MenuItem("Tasto di copia")
         for label, code in COPY_HOTKEYS:
             item = rumps.MenuItem(label, callback=self._make_copykey_cb(code))
             item.state = 1 if cfg.copy_hotkey == code else 0
@@ -72,23 +80,21 @@ class LocalFlowMenuApp(rumps.App):
             copykey_menu.add(item)
         self.copykey_menu = copykey_menu
         self.pause_item = rumps.MenuItem("⏻ Spegni microfono", callback=self._toggle_pause)
-        self.translate_item = rumps.MenuItem("Traduci in inglese (parli IT, esce EN)", callback=self._toggle_translate)
-        self.translate_item.state = 1 if cfg.translate_enabled else 0
-        self.trquality_item = rumps.MenuItem("   └ Qualità AI (inglese naturale, più lenta)", callback=self._toggle_trquality)
-        # visually tied to its parent: checked only when translation is actually ON
-        self.trquality_item.state = 1 if (cfg.translate_enabled and cfg.translate_quality) else 0
-        self.stream_item = rumps.MenuItem("Streaming (trascrive mentre parli)", callback=self._toggle_streaming)
-        self.stream_item.state = 1 if cfg.streaming_enabled else 0
-        self.polish_item = rumps.MenuItem("Polish AI (LLM)", callback=self._toggle_polish)
-        self.polish_item.state = 1 if cfg.format_enabled else 0
+        self.translation_items = {}
+        translation_menu = rumps.MenuItem("Traduzione")
+        for label, code in TRANSLATIONS:
+            item = rumps.MenuItem(label, callback=self._make_translation_cb(code))
+            item.state = 1 if code == "off" else 0  # session-only: every boot starts off
+            self.translation_items[code] = item
+            translation_menu.add(item)
+        self.translation_menu = translation_menu
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
         open_cfg = rumps.MenuItem("Apri configurazione", callback=self._open_config)
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.copykey_menu, self.translate_item, self.trquality_item, self.stream_item,
-                     self.polish_item, None, recent, None,
+                     self.copykey_menu, self.translation_menu, None, recent, None,
                      self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
@@ -187,37 +193,14 @@ class LocalFlowMenuApp(rumps.App):
             item.title = "⏻ Accendi microfono"
             threading.Thread(target=self.daemon.pause, daemon=True).start()
 
-    def _toggle_translate(self, item):
-        if self.daemon is None:
-            return
-        item.state = 0 if item.state else 1
-        # keep the sub-checkbox visually coherent with its parent
-        self.trquality_item.state = 1 if (item.state and self.daemon.cfg.translate_quality) else 0
-        threading.Thread(target=self.daemon.set_translate, args=(bool(item.state),), daemon=True).start()
-
-    def _toggle_trquality(self, item):
-        if self.daemon is None:
-            return
-        item.state = 0 if item.state else 1
-        config.set_key("translate_quality", "true" if item.state else "false")
-        self.daemon.cfg.translate_quality = bool(item.state)
-        if self.daemon.cfg.translate_enabled:  # re-apply the active mode
-            threading.Thread(target=self.daemon.set_translate, args=(True,), daemon=True).start()
-
-    def _toggle_streaming(self, item):
-        if self.daemon is None:
-            return
-        item.state = 0 if item.state else 1
-        self.daemon.set_streaming(bool(item.state))
-
-    def _toggle_polish(self, item):
-        if self.daemon is None:
-            return
-        item.state = 0 if item.state else 1
-        self.daemon.set_polish(bool(item.state))
-        if item.state and not self.daemon.use_llm:
-            rumps.notification("LocalFlow", "Polish non attivo",
-                               "Ollama non raggiungibile: avvialo con 'brew services start ollama'.")
+    def _make_translation_cb(self, code):
+        def cb(_item):
+            if self.daemon is None:
+                return
+            for c, item in self.translation_items.items():
+                item.state = 1 if c == code else 0
+            threading.Thread(target=self.daemon.set_translate_mode, args=(code,), daemon=True).start()
+        return cb
 
     def _login_enabled(self):
         result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)

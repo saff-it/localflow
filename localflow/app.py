@@ -198,14 +198,19 @@ class LocalFlowDaemon:
             self._listener = None
         self.start_listener()
 
-    def set_translate(self, enabled: bool) -> None:
-        """SESSION-ONLY by design (not persisted): a special mode like
-        translation silently surviving a restart cost the user a confused
-        night — every boot starts in plain transcription."""
-        self.cfg.translate_enabled = enabled
+    def set_translate_mode(self, mode: str) -> None:
+        """SESSION-ONLY by design (never persisted): a special mode silently
+        surviving a restart cost the user a confused night — every boot starts
+        in plain transcription. Modes: off | en_fast (Whisper native, literal)
+        | en_ai / Spanish / French / German (LLM, natural)."""
         self.ollama_up = formatter.available(self.cfg.ollama_url)
-        self._llm_translate = enabled and self.cfg.translate_quality and self.ollama_up
-        native_tr = enabled and not self._llm_translate
+        if mode not in ("off", "en_fast") and not self.ollama_up:
+            print("⚠️  traduzione AI non disponibile senza Ollama — ripiego")
+            return self.set_translate_mode("en_fast" if mode == "en_ai" else "off")
+        native_tr = mode == "en_fast"
+        self.cfg.translate_enabled = mode != "off"
+        self._llm_translate = mode not in ("off", "en_fast")
+        self._tr_target = {"en_ai": "English"}.get(mode, mode if self._llm_translate else None)
         if self._llm_translate:
             threading.Thread(target=formatter.warmup,
                              args=(self.cfg.ollama_url, self.cfg.ollama_model), daemon=True).start()
@@ -219,6 +224,8 @@ class LocalFlowDaemon:
             if hasattr(old, "close"):
                 old.close()
             self.status = "pronto"
+        print("Traduzione: %s" % ("spenta" if mode == "off" else
+                                  "nativa EN" if native_tr else "AI -> %s" % self._tr_target))
 
     def set_streaming(self, enabled: bool) -> None:
         config.set_key("streaming", "true" if enabled else "false")
@@ -350,7 +357,9 @@ class LocalFlowDaemon:
     def _translate_chunk(self, text, done_texts):
         """Per-chunk LLM translation, overlapped with the user's speech."""
         context = " ".join(done_texts)[-200:].strip()
-        return formatter.translate_text(text, self.cfg.ollama_url, self.cfg.ollama_model, context=context)
+        return formatter.translate_text(text, self.cfg.ollama_url, self.cfg.ollama_model,
+                                        target=getattr(self, "_tr_target", None) or "English",
+                                        context=context)
 
     def _process(self, clip, duration, app_name, copy_mode=False, session=None, editable=True):
         cfg = self.cfg
@@ -394,7 +403,8 @@ class LocalFlowDaemon:
         if self._llm_translate and not streamed and text:
             # Short/batch dictations: translate the whole text in one shot
             # (streamed chunks were already translated on the fly).
-            text = formatter.translate_text(text, cfg.ollama_url, cfg.ollama_model)
+            text = formatter.translate_text(text, cfg.ollama_url, cfg.ollama_model,
+                                            target=getattr(self, "_tr_target", None) or "English")
         asr_secs = time.time() - started  # in streaming = attesa percepita al rilascio
         self._mark_engine_use()
         text = textproc.tidy(text)
