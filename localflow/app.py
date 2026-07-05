@@ -225,13 +225,9 @@ class LocalFlowDaemon:
             return self._holding and self._hold_seq == hold_id
 
         def go():  # never block the pynput callback thread: a hung CoreAudio
-            if not copy_mode and not inject.focused_is_editable():
-                # Paste key pressed outside a text field: warn, don't record.
-                # (The copy key keeps working everywhere — that's its job.)
-                _play(SOUND_WRONG, self.cfg.sounds)
-                print("(non sei in un campo di testo: dettatura non avviata — usa il tasto copia per dettare ovunque)")
-                self._copy_mode = None  # tells _on_stop to ignore this hold
-                return
+            # NOTHING may run before the recorder: any pre-check (AX focus
+            # queries can take ~0.75s on Electron apps) delays the mic past
+            # the user's first words. The focus check moved to release time.
             if not still_held():
                 return  # key already released: NEVER start a zombie recording
             try:   # call here used to kill the hotkey for good
@@ -265,8 +261,6 @@ class LocalFlowDaemon:
 
     def _on_stop(self):
         self._holding = False  # any late go() for this hold now aborts itself
-        if getattr(self, "_copy_mode", False) is None:  # hold refused at start
-            return
         session, self._session = self._session, None
         if session is not None:
             self._monitor_stop.set()
@@ -286,10 +280,14 @@ class LocalFlowDaemon:
 
         def work():
             app_name = inject.frontmost_app()  # where the user was at key release
+            # Focus check at RELEASE, in parallel with transcription (its
+            # ~0.1-0.75s is free here): pasting into a non-field becomes
+            # clipboard + warning sound instead of a blind ⌘V.
+            editable = True if copy_mode else inject.focused_is_editable()
             with self._busy:
                 self.status = "trascrivo..."
                 try:
-                    self._process(clip, duration, app_name, copy_mode, session)
+                    self._process(clip, duration, app_name, copy_mode, session, editable)
                 except Exception as exc:  # never die silently in a worker thread
                     print("⚠️  errore dettatura: %s" % exc)
                 finally:
@@ -312,7 +310,7 @@ class LocalFlowDaemon:
         except Exception:
             pass  # debugging aid must never break dictation
 
-    def _process(self, clip, duration, app_name, copy_mode=False, session=None):
+    def _process(self, clip, duration, app_name, copy_mode=False, session=None, editable=True):
         cfg = self.cfg
         started = time.time()
         streamed = False
@@ -372,6 +370,11 @@ class LocalFlowDaemon:
             inject.set_clipboard(text)
             _play(SOUND_COPY, cfg.sounds)
             print("[%4.1fs audio | asr %.1fs | %s] (negli appunti) %s" % (duration, asr_secs, lang, text))
+            return
+        if not editable:  # paste key used outside a text field: warn, keep the text safe
+            inject.set_clipboard(text)
+            _play(SOUND_WRONG, cfg.sounds)
+            print("[%4.1fs audio | asr %.1fs | %s] (non eri in un campo di testo: negli appunti) %s" % (duration, asr_secs, lang, text))
             return
         if cfg.paste:
             # Slow processing + user moved on: never paste blind into another app.
