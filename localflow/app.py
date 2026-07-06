@@ -21,9 +21,12 @@ SOUND_WRONG = "/System/Library/Sounds/Basso.aiff"
 
 MIN_UTTERANCE_SECONDS = 0.3  # shorter than this = accidental tap, skip (also kills silence hallucinations)
 
-# Chat apps where a single compact block is the norm: "auto" paragraphs skips them.
-COMPACT_APPS = {
-    "WhatsApp", "Messages", "Telegram", "Slack", "Discord", "Signal", "Messenger", "iMessage",
+# "auto" paragraphs run ONLY in real writing apps (positive list): everywhere
+# else — browsers, chats, unknown apps — delivery must be instant. A negative
+# list once let a 25s reflow fire on every long dictation into Opera.
+EXPANSIVE_APPS = {
+    "Mail", "Notes", "Note", "Pages", "TextEdit", "Microsoft Word",
+    "Obsidian", "Bear", "Craft", "Ulysses", "Notion",
 }
 
 
@@ -433,8 +436,8 @@ class LocalFlowDaemon:
         mode = self.cfg.paragraphs
         if mode == "never" or not self.ollama_up or not formatter.needs_paragraphs(text):
             return text
-        if mode == "auto" and app_name in COMPACT_APPS:
-            return text  # chat apps stay compact
+        if mode == "auto" and app_name not in EXPANSIVE_APPS:
+            return text  # only true writing apps pay the reflow cost
         return formatter.format_paragraphs(text, self.cfg.ollama_url, self.cfg.ollama_model)
 
     def _translate_chunk(self, text, done_texts):
@@ -505,7 +508,9 @@ class LocalFlowDaemon:
             text = formatter.punctuate(text, cfg.ollama_url, cfg.ollama_model)
         llm_secs = time.time() - llm_started
         text = textproc.apply_dictionary(text, cfg.replacements)
+        fmt_started = time.time()  # reflow cost must NEVER be invisible in the log
         text = self._maybe_paragraphs(text, app_name)
+        llm_secs += time.time() - fmt_started
         if copy_mode:  # copy hotkey: clipboard only, paste it wherever you like
             inject.set_clipboard(text)
             _play(SOUND_COPY, cfg.sounds)

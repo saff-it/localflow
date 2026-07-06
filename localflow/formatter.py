@@ -166,8 +166,10 @@ _ENUM_CUES = {
 
 
 def needs_paragraphs(text: str) -> bool:
-    """Only long single-block text benefits from reflow; short messages don't."""
-    return len(text) > 250 and text.count("\n") == 0
+    """Only mail-sized single-block text benefits from reflow. Above ~1200
+    chars the LLM re-emission cost explodes (25s+ observed on a 42s dictation)
+    and huge texts land in editors where the user formats anyway."""
+    return 250 < len(text) < 1200 and text.count("\n") == 0
 
 
 def _structural_only(original: str, formatted: str) -> bool:
@@ -197,7 +199,7 @@ def _structural_only(original: str, formatted: str) -> bool:
     return True
 
 
-def format_paragraphs(text: str, url: str, model: str, timeout: float = 60.0) -> str:
+def format_paragraphs(text: str, url: str, model: str, timeout: float = 20.0) -> str:
     """Add paragraph breaks and bullet points. _structural_only guarantees the
     model only restructured (whitespace/bullets/dropped ordinal cues) and never
     rewrote words: any real edit is rejected and the original text wins."""
