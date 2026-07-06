@@ -490,8 +490,10 @@ class LocalFlowDaemon:
         if cfg.assistant_internet and websearch.wants_search(question):
             _notify("🌐 " + question[:60], "cerco online…")
             print("🌐 cerco online…")
-            web_answer = websearch.answer_with_search(question, cfg.ollama_url,
-                                                      cfg.assistant_model or cfg.ollama_model)
+            gen = self.assistant.begin_speech()  # stream synthesis → early voice
+            web_answer = websearch.answer_with_search(
+                question, cfg.ollama_url, cfg.assistant_search_model or cfg.ollama_model,
+                on_sentence=lambda s: self.assistant.feed_speech(gen, s))
             if web_answer:
                 self.assistant.history.append({"role": "user", "content": question})
                 self.assistant.history.append({"role": "assistant", "content": web_answer})
@@ -501,8 +503,6 @@ class LocalFlowDaemon:
                 inject.set_clipboard(web_answer)
                 _notify("🌐 Assistente", web_answer)
                 print("🌐 %s" % web_answer)
-                if cfg.assistant_voice_enabled:
-                    self.assistant.speak(web_answer)
                 return
             print("(ricerca web fallita, rispondo in locale)")
         # Does the question refer to the screen? If so, grab it for the vision model.

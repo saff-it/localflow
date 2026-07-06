@@ -88,6 +88,16 @@ class Assistant:
         self.stop_speaking()
         self._say_queue.put((self._speak_gen, text.strip()))
 
+    def begin_speech(self) -> int:
+        """Start a fresh speech turn (barge-in prior); return its generation id."""
+        self.stop_speaking()
+        return self._speak_gen
+
+    def feed_speech(self, gen: int, sentence: str) -> None:
+        """Enqueue one sentence for an ongoing streamed speech turn."""
+        if self.speak_enabled and sentence.strip():
+            self._say_queue.put((gen, sentence.strip()))
+
     def reset(self) -> None:
         """Start a fresh conversation. The persistent .md log is NOT erased —
         it's the permanent memory; only the active in-context history clears."""

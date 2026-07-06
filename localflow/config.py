@@ -52,6 +52,7 @@ model = ""             # modello LLM dell'assistente; "" = usa ollama_model
 vision = true          # può vedere lo schermo quando la domanda lo richiede (modello locale)
 vision_model = "qwen2.5vl:3b"  # modello visivo locale (gratis); on-demand, poi scaricato
 internet = true        # può cercare online (DuckDuckGo gratis + sintesi locale) quando serve
+search_model = "qwen2.5:7b"  # sintesi dei risultati web: 7b (accurato); il 3b sbagliava i fatti
 cloud_model = "claude-sonnet-4-5"  # modello Claude per il Boost Ultra (a pagamento, opt-in)
 
 [format]
@@ -90,6 +91,7 @@ class Config:
     assistant_vision: bool = True
     assistant_vision_model: str = "qwen2.5vl:3b"
     assistant_internet: bool = True
+    assistant_search_model: str = "qwen2.5:7b"
     assistant_cloud_model: str = "claude-sonnet-4-5"
     sample_rate: int = 16000
     device: str = ""
@@ -149,6 +151,7 @@ def load() -> Config:
     cfg.assistant_vision = bool(asst.get("vision", cfg.assistant_vision))
     cfg.assistant_vision_model = asst.get("vision_model", cfg.assistant_vision_model)
     cfg.assistant_internet = bool(asst.get("internet", cfg.assistant_internet))
+    cfg.assistant_search_model = asst.get("search_model", cfg.assistant_search_model)
     cfg.assistant_cloud_model = asst.get("cloud_model", cfg.assistant_cloud_model)
 
     au = data.get("audio", {})
