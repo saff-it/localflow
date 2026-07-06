@@ -469,8 +469,11 @@ class LocalFlowDaemon:
                 self.assistant.memory.append("user", question + " [Boost]")
                 self.assistant.memory.append("assistant", answer)
             inject.set_clipboard(answer)
-            _notify("🚀 Boost", answer)
-            print("🚀 %s" % answer)
+            c = cloud.session_cost
+            _notify("🚀 Boost  (%.1f¢ · sessione %.0f¢)" % (getattr(cloud.ask, "last_cost", 0.0) * 100,
+                                                            c["usd"] * 100), answer)
+            print("🚀 [costo %.2f¢ | sessione %.1f¢ in %d chiamate] %s"
+                  % (getattr(cloud.ask, "last_cost", 0.0) * 100, c["usd"] * 100, c["calls"], answer))
             if cfg.assistant_voice_enabled:
                 self.assistant.speak(answer)
             return

@@ -49,6 +49,24 @@ def save_key(key: str) -> None:
     os.chmod(SECRET_PATH, 0o600)
 
 
+# Approx Sonnet-class pricing (USD per token) + web search per call. Rough, for
+# a running cost hint only — the Console has the authoritative figures.
+_PRICE_IN = 3.0 / 1_000_000
+_PRICE_OUT = 15.0 / 1_000_000
+_PRICE_SEARCH = 0.01  # per web search
+
+
+def estimate_cost(usage: dict) -> float:
+    tin = usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+    tout = usage.get("output_tokens", 0)
+    searches = (usage.get("server_tool_use", {}) or {}).get("web_search_requests", 0)
+    return tin * _PRICE_IN + tout * _PRICE_OUT + searches * _PRICE_SEARCH
+
+
+# Running total of estimated Boost spend this session (never persisted).
+session_cost = {"usd": 0.0, "calls": 0}
+
+
 def ask(question: str, history: Optional[List[dict]] = None, image_b64: Optional[str] = None,
         web_search: bool = True, model: str = DEFAULT_MODEL, timeout: float = 90.0) -> str:
     """One Claude turn. image_b64 → vision; web_search → live internet with
@@ -73,7 +91,12 @@ def ask(question: str, history: Optional[List[dict]] = None, image_b64: Optional
             }, data=json.dumps(body), timeout=timeout)
         if resp.status_code != 200:
             return "Boost: errore Claude (%s). %s" % (resp.status_code, resp.text[:120])
-        blocks = resp.json().get("content", [])
+        data = resp.json()
+        cost = estimate_cost(data.get("usage", {}))
+        session_cost["usd"] += cost
+        session_cost["calls"] += 1
+        ask.last_cost = cost  # type: ignore[attr-defined]
+        blocks = data.get("content", [])
         text = " ".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
         return text or "(nessuna risposta)"
     except requests.RequestException as exc:
