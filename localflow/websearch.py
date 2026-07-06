@@ -15,17 +15,38 @@ _BODY_MAX = 220  # trim each result body: less for the LLM to chew = faster
 
 # Trigger words: the question wants fresh/online info the local model can't know.
 SEARCH_TRIGGERS = (
-    "cerca online", "cerca su internet", "cerca sul web", "cerca in rete",
-    "ultime notizie", "notizie di oggi", "che tempo fa", "meteo",
-    "chi ha vinto", "risultato", "quotazione", "prezzo di", "quanto costa",
-    "novità su", "aggiornamenti su", "oggi", "ieri", "questa settimana",
-    "nel 2025", "nel 2026", "attuale", "adesso online",
+    # explicit
+    "cerca online", "cerca su internet", "cerca sul web", "cerca in rete", "cerca su google",
+    # news / current
+    "ultime notizie", "notizie", "che tempo fa", "meteo", "novità", "aggiornament", "attuale",
+    # time-relative (fresh info)
+    "oggi", "ieri", "domani", "stasera", "stamattina", "questa settimana", "prossim",
+    "in programma", "che ora", "a che ora", "quando", "orario",
+    # sport / events / markets
+    "chi ha vinto", "risultato", "gioca", "partita", "in tv", "classifica",
+    "quotazione", "borsa", "prezzo di", "quanto costa", "cambio euro",
+    # years
+    "nel 2025", "nel 2026", "2025", "2026",
+)
+
+# If the LOCAL model refuses for lack of real-time data, we auto-retry on the web.
+_REFUSAL_MARKERS = (
+    "tempo reale", "informazioni future", "informazioni aggiornate", "non ho accesso",
+    "non ho informazioni", "non posso dirti", "controllare il sito", "programma delle partite",
+    "servizio sportivo", "mie conoscenze", "data di aggiornamento", "non sono aggiornato",
+    "fino al mio ultimo aggiornamento", "non dispongo di", "consiglio di controllare",
 )
 
 
 def wants_search(text: str) -> bool:
     t = text.lower()
     return any(k in t for k in SEARCH_TRIGGERS)
+
+
+def is_refusal(answer: str) -> bool:
+    """True if a local answer looks like 'I can't, no real-time data' → retry on the web."""
+    a = answer.lower()
+    return sum(1 for k in _REFUSAL_MARKERS if k in a) >= 1
 
 
 def search(query: str, max_results: int = 3, region: str = "it-it") -> List[dict]:

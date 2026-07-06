@@ -517,6 +517,19 @@ class LocalFlowDaemon:
         _notify("💬 " + question[:60], "guardo lo schermo…" if image_b64 else "sto pensando…")
         # Streamed: the first sentence is SPOKEN while the rest still generates.
         answer = self.assistant.ask_and_speak(question, image_b64=image_b64, model=vmodel)
+        # Safety net: the local model refused for lack of live data → go to the web.
+        if image_b64 is None and cfg.assistant_internet and websearch.is_refusal(answer):
+            print("↻ risposta locale insufficiente → cerco online")
+            _notify("🌐 " + question[:60], "cerco online…")
+            gen = self.assistant.begin_speech()  # cut the local refusal voice, speak the real answer
+            web = websearch.answer_with_search(
+                question, cfg.ollama_url, cfg.assistant_search_model or cfg.ollama_model,
+                on_sentence=lambda s: self.assistant.feed_speech(gen, s))
+            if web:
+                answer = web
+                self.assistant.history[-1] = {"role": "assistant", "content": web}
+                if self.assistant.memory:
+                    self.assistant.memory.append("assistant", "[corretto via web] " + web)
         inject.set_clipboard(answer)  # full answer on the clipboard, to paste if wanted
         _notify("🤖 Assistente", answer)  # primary channel: read it
         print("🤖 %s" % answer)
