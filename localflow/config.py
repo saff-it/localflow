@@ -21,7 +21,8 @@ DEFAULT_CONFIG = """\
 # The fn key cannot be captured from Python — that one needs a native event tap (see roadmap).
 key = "alt_r"
 copy_key = ""          # secondo tasto: detta e COPIA negli appunti senza incollare ("" = disattivato)
-assistant_key = "cmd_l"  # terzo tasto: parla con l'assistente vocale ("" = disattivato)
+assistant_key = ""       # tasto assistente vocale. USA UN TASTO FUNZIONE (f13/f14): i
+                         # modificatori (cmd/alt/ctrl) confliggono con le scorciatoie. "" = spento
 
 [audio]
 sample_rate = 16000
@@ -43,7 +44,7 @@ streaming = true       # trascrivi MENTRE parli: al rilascio resta solo la coda 
 chunk_seconds = 7      # dimensione dei blocchi trascritti in corsa (tagliati nelle tue pause)
 
 [assistant]
-enabled = true         # assistente vocale locale (risponde a voce); richiede Ollama
+enabled = false        # assistente vocale locale (risponde a voce); richiede Ollama + un tasto funzione
 voice = "Alice"        # voce macOS per la risposta parlata (say -v ?); "" = voce di sistema
 rate = 0               # velocità voce (parole/min); 0 = predefinita
 model = ""             # modello LLM dell'assistente; "" = usa ollama_model
@@ -75,8 +76,8 @@ sounds = true            # feedback sounds on record start / text ready
 class Config:
     hotkey: str = "alt_r"
     copy_hotkey: str = ""
-    assistant_key: str = "cmd_l"
-    assistant_enabled: bool = True
+    assistant_key: str = ""
+    assistant_enabled: bool = False
     assistant_voice: str = "Alice"
     assistant_rate: int = 0
     assistant_model: str = ""

@@ -285,6 +285,11 @@ class LocalFlowDaemon:
             pass
 
     def _on_start(self, mode="paste"):
+        # Mutual exclusion: while one key is held, ignore any other key-down.
+        # Sharing one recorder across three keys let a stray ⌘-shortcut on the
+        # assistant key corrupt an in-flight dictation ("parole a caso").
+        if getattr(self, "_holding", False):
+            return
         self._mode = mode
         self._copy_mode = mode == "copy"
         self._cancelled = False

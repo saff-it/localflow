@@ -32,9 +32,9 @@ HOTKEYS = [
 COPY_HOTKEYS = [("Disattivato", "")] + HOTKEYS
 ASSISTANT_KEYS = [
     ("Disattivato", ""),
-    ("⌘ Command sinistro", "cmd_l"),
-    ("⌃ Control sinistro", "ctrl_l"),
+    ("F13", "f13"),
     ("F14", "f14"),
+    ("F15", "f15"),
 ]
 PARAGRAPHS = [
     ("Auto (fuori dalle chat)", "auto"),
