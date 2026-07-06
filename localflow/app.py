@@ -345,6 +345,14 @@ class LocalFlowDaemon:
             # reopening after a long break, the sound arrives late but honest —
             # no syllables spoken into a mic that wasn't there yet.
             _play(SOUND_START, self.cfg.sounds)
+            if mode == "paste":
+                # Early "not-ready-to-dictate" cue: if the focus isn't a text
+                # field, a deny sound follows the Pop (async, never delays the
+                # mic). We still record → the text is saved to the clipboard.
+                def deny_if_not_editable():
+                    if still_held() and not inject.focused_is_editable():
+                        _play(SOUND_WRONG, self.cfg.sounds)
+                threading.Thread(target=deny_if_not_editable, daemon=True).start()
             if mode in ("paste", "copy") and self._use_streaming():
                 self._monitor_stop.set()  # belt: no stray monitor may survive
                 self._monitor_stop = threading.Event()
