@@ -89,20 +89,31 @@ class Assistant:
 
     # -- streamed question/answer ----------------------------------------------
 
-    def ask_and_speak(self, question: str, timeout: float = 180.0) -> str:
+    def ask_and_speak(self, question: str, timeout: float = 180.0,
+                      image_b64: Optional[str] = None, model: Optional[str] = None) -> str:
         """Stream the model's answer, speaking each completed sentence right
-        away. Returns the full answer text (for clipboard/log) once done."""
+        away. With image_b64 set, the vision `model` sees the screen. Returns
+        the full answer text (for clipboard/log) once done."""
         self.stop_speaking()
         gen = self._speak_gen
-        self.history.append({"role": "user", "content": question})
+        note = question + (" [con schermata]" if image_b64 else "")
+        self.history.append({"role": "user", "content": note})
         if self.memory:
-            self.memory.append("user", question)
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}] + self.history[-2 * MAX_TURNS:]
+            self.memory.append("user", note)
+        user_msg = {"role": "user", "content": question}
+        if image_b64:
+            user_msg["images"] = [image_b64]
+            # vision turn: send only the current question+image (history may hold
+            # other images the small VLM can't juggle), keep the system prompt.
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}, user_msg]
+        else:
+            messages = [{"role": "system", "content": SYSTEM_PROMPT}] + self.history[-2 * MAX_TURNS:]
+        use_model = model or self.model
         buf, full = "", []
         try:
             with requests.post(
                 self.url + "/api/chat",
-                json={"model": self.model, "messages": messages, "stream": True,
+                json={"model": use_model, "messages": messages, "stream": True,
                       "keep_alive": "5m",
                       "options": {"temperature": 0.4, "num_predict": 300}},
                 timeout=timeout, stream=True,

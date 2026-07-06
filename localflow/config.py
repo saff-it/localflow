@@ -49,6 +49,8 @@ voice_enabled = false  # leggi la risposta ad alta voce? (canale primario = noti
 voice = "Alice"        # voce macOS per la risposta parlata (say -v ?); "" = voce di sistema
 rate = 0               # velocità voce (parole/min); 0 = predefinita
 model = ""             # modello LLM dell'assistente; "" = usa ollama_model
+vision = true          # può vedere lo schermo quando la domanda lo richiede (modello locale)
+vision_model = "qwen2.5vl:3b"  # modello visivo locale (gratis); on-demand, poi scaricato
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
@@ -83,6 +85,8 @@ class Config:
     assistant_voice: str = "Alice"
     assistant_rate: int = 0
     assistant_model: str = ""
+    assistant_vision: bool = True
+    assistant_vision_model: str = "qwen2.5vl:3b"
     sample_rate: int = 16000
     device: str = ""
     mic_release_seconds: float = 300.0
@@ -138,6 +142,8 @@ def load() -> Config:
     cfg.assistant_voice = asst.get("voice", cfg.assistant_voice)
     cfg.assistant_rate = int(asst.get("rate", cfg.assistant_rate))
     cfg.assistant_model = asst.get("model", cfg.assistant_model)
+    cfg.assistant_vision = bool(asst.get("vision", cfg.assistant_vision))
+    cfg.assistant_vision_model = asst.get("vision_model", cfg.assistant_vision_model)
 
     au = data.get("audio", {})
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))

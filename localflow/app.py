@@ -12,8 +12,16 @@ import time
 
 from . import assistant as assistant_mod
 from . import asst_memory
-from . import audio, config, formatter, hotkey, inject, streaming, textproc
+from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc
 from .transcriber import create_transcriber
+
+# Words that mean "look at my screen" — trigger a screenshot for the vision model.
+_SCREEN_TRIGGERS = (
+    "schermo", "schermata", "questa pagina", "qui", "questo qui", "guarda", "vedi questo",
+    "che vedi", "cosa vedi", "sullo schermo", "questa schermata", "questo errore",
+    "questa immagine", "che c'è scritto", "cosa c'è scritto", "aiutami con questo",
+    "questo codice", "questa foto", "il video", "questa scheda", "leggi questo",
+)
 
 
 def _notify(title: str, text: str) -> None:
@@ -454,9 +462,18 @@ class LocalFlowDaemon:
         if not question:
             return
         print("🎙️  %s" % question)
-        _notify("💬 " + question[:60], "sto pensando…")
+        # Does the question refer to the screen? If so, grab it for the vision model.
+        image_b64, vmodel = None, None
+        ql = question.lower()
+        if cfg.assistant_vision and any(t in ql for t in _SCREEN_TRIGGERS):
+            shot = screen.capture()
+            if shot is not None:
+                image_b64 = screen.as_base64(shot)
+                vmodel = cfg.assistant_vision_model
+                print("👁️  guardo lo schermo (%s)" % vmodel)
+        _notify("💬 " + question[:60], "guardo lo schermo…" if image_b64 else "sto pensando…")
         # Streamed: the first sentence is SPOKEN while the rest still generates.
-        answer = self.assistant.ask_and_speak(question)
+        answer = self.assistant.ask_and_speak(question, image_b64=image_b64, model=vmodel)
         inject.set_clipboard(answer)  # full answer on the clipboard, to paste if wanted
         _notify("🤖 Assistente", answer)  # primary channel: read it
         print("🤖 %s" % answer)
