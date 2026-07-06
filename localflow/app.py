@@ -101,8 +101,11 @@ class LocalFlowDaemon:
             print("AI cleanup: off")
         if self.ollama_up and cfg.punctuate_enabled:
             print("Punteggiatura di soccorso: on (solo su dettature lunghe senza segni)")
-        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate
-                               or cfg.paragraphs != "never" or cfg.assistant_enabled):
+        # Warm qwen at boot ONLY for features that run inline on dictations
+        # (translate/polish/punctuate). Assistant and paragraphs pay their own
+        # cold start instead: a resident 4.6GB LLM contends with Whisper for
+        # the GPU and made dictation latency jitter 0.7s -> 2-4s.
+        if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate):
             threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         self._busy = threading.Lock()
         self._last_paste = 0.0

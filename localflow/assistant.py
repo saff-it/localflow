@@ -96,7 +96,7 @@ class Assistant:
             with requests.post(
                 self.url + "/api/chat",
                 json={"model": self.model, "messages": messages, "stream": True,
-                      "keep_alive": "30m",
+                      "keep_alive": "5m",
                       "options": {"temperature": 0.4, "num_predict": 300}},
                 timeout=timeout, stream=True,
             ) as resp:
