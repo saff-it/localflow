@@ -53,32 +53,26 @@ def _ax_systemwide():
 
 
 def focused_is_editable() -> bool:
-    """True if the focused UI element looks like a text field.
-
-    NO focused element (Desktop, Finder without a field, a non-interactive
-    window) → NOT a field → deny. When a field IS focused but its type is
-    unclear, we fail-OPEN (allow) so a lazy app never blocks real dictation.
-    Only a *reachable AX API error* fails open — genuine 'nothing focused' denies."""
+    """Conservative & SAFE: deny ONLY when we're certain there's no text target
+    at all — no keyboard-focused element (Desktop, an app window with nothing
+    focused). If ANYTHING has focus, we allow dictation (fail-open) so a real
+    text field is NEVER wrongly blocked. Reliability of dictation > cleverness."""
     try:
         import ApplicationServices as AS  # already present: pynput depends on it
 
         system = _ax_systemwide()
         err, focused = AS.AXUIElementCopyAttributeValue(system, AS.kAXFocusedUIElementAttribute, None)
         if err != 0 or focused is None:
-            return False  # nothing has keyboard focus → you can't be dictating into a field
+            return False  # nothing focused → Desktop / no field → deny
+        # A non-text control (button/image/etc) that grabbed focus → deny; any
+        # text-ish or unknown focused element → allow (never block dictation).
         err, role = AS.AXUIElementCopyAttributeValue(focused, AS.kAXRoleAttribute, None)
-        if err == 0 and role:
-            if role in ("AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"):
-                return True
-            if role in ("AXButton", "AXImage", "AXMenuItem", "AXCheckBox", "AXRadioButton",
-                        "AXSlider", "AXMenuButton", "AXList", "AXTable", "AXWindow", "AXScrollArea"):
-                return False  # clearly not a text field → deny
-        err, names = AS.AXUIElementCopyAttributeNames(focused, None)
-        if err == 0 and names is not None and "AXSelectedTextRange" in list(names):
-            return True  # editable/selectable text views expose a selection range
-        return False  # a focused element that's none of the above: treat as not-a-field
+        if err == 0 and role in ("AXButton", "AXImage", "AXMenuItem", "AXCheckBox",
+                                 "AXRadioButton", "AXSlider", "AXMenuButton"):
+            return False
+        return True
     except Exception:
-        return True  # AX genuinely unreachable → fail open, never block dictation
+        return True  # AX unreachable → fail open, never block dictation
 
 
 def _paste_keystroke_quartz() -> bool:
