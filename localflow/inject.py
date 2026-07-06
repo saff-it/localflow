@@ -53,25 +53,32 @@ def _ax_systemwide():
 
 
 def focused_is_editable() -> bool:
-    """True if the focused UI element looks like a text field. FAIL-OPEN: any
-    doubt (apps with poor accessibility exposure) returns True — dictation must
-    never be blocked by a lazy app; we only stop when it's clearly not a field."""
+    """True if the focused UI element looks like a text field.
+
+    NO focused element (Desktop, Finder without a field, a non-interactive
+    window) → NOT a field → deny. When a field IS focused but its type is
+    unclear, we fail-OPEN (allow) so a lazy app never blocks real dictation.
+    Only a *reachable AX API error* fails open — genuine 'nothing focused' denies."""
     try:
         import ApplicationServices as AS  # already present: pynput depends on it
 
         system = _ax_systemwide()
         err, focused = AS.AXUIElementCopyAttributeValue(system, AS.kAXFocusedUIElementAttribute, None)
         if err != 0 or focused is None:
-            return True
+            return False  # nothing has keyboard focus → you can't be dictating into a field
         err, role = AS.AXUIElementCopyAttributeValue(focused, AS.kAXRoleAttribute, None)
-        if err == 0 and role in ("AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"):
-            return True
+        if err == 0 and role:
+            if role in ("AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"):
+                return True
+            if role in ("AXButton", "AXImage", "AXMenuItem", "AXCheckBox", "AXRadioButton",
+                        "AXSlider", "AXMenuButton", "AXList", "AXTable", "AXWindow", "AXScrollArea"):
+                return False  # clearly not a text field → deny
         err, names = AS.AXUIElementCopyAttributeNames(focused, None)
         if err == 0 and names is not None and "AXSelectedTextRange" in list(names):
             return True  # editable/selectable text views expose a selection range
-        return False
+        return False  # a focused element that's none of the above: treat as not-a-field
     except Exception:
-        return True
+        return True  # AX genuinely unreachable → fail open, never block dictation
 
 
 def _paste_keystroke_quartz() -> bool:

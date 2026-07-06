@@ -644,10 +644,10 @@ class LocalFlowDaemon:
             _play(SOUND_COPY, cfg.sounds)
             print("[%4.1fs audio | asr %.1fs | %s] (negli appunti) %s" % (duration, asr_secs, lang, text))
             return
-        if not editable:  # paste key used outside a text field: warn, keep the text safe
-            inject.set_clipboard(text)
+        if not editable:  # paste key outside a text field: nothing happens, just deny
             _play(SOUND_WRONG, cfg.sounds)
-            print("[%4.1fs audio | asr %.1fs | %s] (non eri in un campo di testo: negli appunti) %s" % (duration, asr_secs, lang, text))
+            print("[%4.1fs audio | asr %.1fs | %s] ✋ non in un campo di testo — dettatura annullata: %s"
+                  % (duration, asr_secs, lang, text))
             return
         if cfg.paste:
             # Slow processing + user moved on: never paste blind into another app.
