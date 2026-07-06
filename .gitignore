@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# assistente: mai versionare segreti/immagini
+.localflow-secrets
+vision/
+*.secrets

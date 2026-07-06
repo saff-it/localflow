@@ -51,6 +51,8 @@ rate = 0               # velocità voce (parole/min); 0 = predefinita
 model = ""             # modello LLM dell'assistente; "" = usa ollama_model
 vision = true          # può vedere lo schermo quando la domanda lo richiede (modello locale)
 vision_model = "qwen2.5vl:3b"  # modello visivo locale (gratis); on-demand, poi scaricato
+internet = true        # può cercare online (DuckDuckGo gratis + sintesi locale) quando serve
+cloud_model = "claude-sonnet-4-5"  # modello Claude per il Boost Ultra (a pagamento, opt-in)
 
 [format]
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
@@ -87,6 +89,8 @@ class Config:
     assistant_model: str = ""
     assistant_vision: bool = True
     assistant_vision_model: str = "qwen2.5vl:3b"
+    assistant_internet: bool = True
+    assistant_cloud_model: str = "claude-sonnet-4-5"
     sample_rate: int = 16000
     device: str = ""
     mic_release_seconds: float = 300.0
@@ -144,6 +148,8 @@ def load() -> Config:
     cfg.assistant_model = asst.get("model", cfg.assistant_model)
     cfg.assistant_vision = bool(asst.get("vision", cfg.assistant_vision))
     cfg.assistant_vision_model = asst.get("vision_model", cfg.assistant_vision_model)
+    cfg.assistant_internet = bool(asst.get("internet", cfg.assistant_internet))
+    cfg.assistant_cloud_model = asst.get("cloud_model", cfg.assistant_cloud_model)
 
     au = data.get("audio", {})
     cfg.sample_rate = int(au.get("sample_rate", cfg.sample_rate))

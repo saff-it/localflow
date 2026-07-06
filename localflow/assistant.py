@@ -81,6 +81,13 @@ class Assistant:
                     pass
             self._say_proc = None
 
+    def speak(self, text: str) -> None:
+        """Speak a whole ready-made answer (used by the web-search path)."""
+        if not self.speak_enabled or not text.strip():
+            return
+        self.stop_speaking()
+        self._say_queue.put((self._speak_gen, text.strip()))
+
     def reset(self) -> None:
         """Start a fresh conversation. The persistent .md log is NOT erased —
         it's the permanent memory; only the active in-context history clears."""

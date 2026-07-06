@@ -120,6 +120,11 @@ class LocalFlowMenuApp(rumps.App):
         self.asst_voice_item.state = 1 if cfg.assistant_voice_enabled else 0
         asst_menu.add(self.asst_voice_item)
         asst_menu.add(rumps.MenuItem("Nuova conversazione", callback=self._new_conversation))
+        asst_menu.add(rumps.separator)
+        self.boost_item = rumps.MenuItem("🚀 Boost Ultra (Claude, a pagamento)", callback=self._toggle_boost)
+        self.boost_item.state = 0  # session-only, always off at boot
+        asst_menu.add(self.boost_item)
+        asst_menu.add(rumps.MenuItem("   Imposta chiave Claude…", callback=self._set_cloud_key))
         self.asst_menu = asst_menu
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
         self.login_item.state = 1 if self._login_enabled() else 0
@@ -255,6 +260,25 @@ class LocalFlowMenuApp(rumps.App):
         if self.daemon is not None:
             self.daemon.new_conversation()
             rumps.notification("LocalFlow", "Assistente", "Nuova conversazione iniziata.")
+
+    def _toggle_boost(self, item):
+        if self.daemon is None:
+            return
+        want = not item.state
+        effective = self.daemon.set_boost(want)
+        item.state = 1 if effective else 0
+        if effective:
+            rumps.notification("LocalFlow", "🚀 Boost Ultra attivo",
+                               "Le domande vanno a Claude (~cent l'una). Si spegne al riavvio.")
+
+    def _set_cloud_key(self, _item):
+        from . import cloud
+
+        resp = rumps.Window("Incolla la tua chiave API Anthropic (sk-ant-...):",
+                            "Boost Ultra — chiave Claude", default_text="", ok="Salva", cancel="Annulla").run()
+        if resp.clicked and resp.text.strip():
+            cloud.save_key(resp.text.strip())
+            rumps.notification("LocalFlow", "Chiave salvata", "Boost Ultra ora disponibile.")
 
     def _make_translation_cb(self, code):
         def cb(_item):

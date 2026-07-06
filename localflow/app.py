@@ -11,8 +11,8 @@ import threading
 import time
 
 from . import assistant as assistant_mod
-from . import asst_memory
-from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc
+from . import asst_memory, cloud
+from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc, websearch
 from .transcriber import create_transcriber
 
 # Words that mean "look at my screen" — trigger a screenshot for the vision model.
@@ -133,6 +133,7 @@ class LocalFlowDaemon:
         self._listener = None
         self._session = None
         self._monitor_stop = threading.Event()
+        self._boost = False  # Boost Ultra (Claude) — session-only, never persisted
         self.assistant = assistant_mod.Assistant(
             cfg.ollama_url, cfg.assistant_model or cfg.ollama_model,
             voice=cfg.assistant_voice, rate=cfg.assistant_rate,
@@ -462,6 +463,48 @@ class LocalFlowDaemon:
         if not question:
             return
         print("🎙️  %s" % question)
+        # BOOST ULTRA (Claude): deliberate, session-only. Handles text, vision
+        # and live web search in one premium call — on the user's dime.
+        if getattr(self, "_boost", False) and cloud.available():
+            image_b64 = None
+            if cfg.assistant_vision and any(t in question.lower() for t in _SCREEN_TRIGGERS):
+                shot = screen.capture()
+                if shot is not None:
+                    image_b64 = screen.as_base64(shot)
+                    print("🚀👁️  Boost guarda lo schermo")
+            _notify("🚀 " + question[:60], "Boost (Claude)…")
+            answer = cloud.ask(question, model=cfg.assistant_cloud_model or cloud.DEFAULT_MODEL,
+                               image_b64=image_b64, web_search=True)
+            self.assistant.history += [{"role": "user", "content": question},
+                                       {"role": "assistant", "content": answer}]
+            if self.assistant.memory:
+                self.assistant.memory.append("user", question + " [Boost]")
+                self.assistant.memory.append("assistant", answer)
+            inject.set_clipboard(answer)
+            _notify("🚀 Boost", answer)
+            print("🚀 %s" % answer)
+            if cfg.assistant_voice_enabled:
+                self.assistant.speak(answer)
+            return
+        # Needs fresh info from the web? Free DuckDuckGo search + local synthesis.
+        if cfg.assistant_internet and websearch.wants_search(question):
+            _notify("🌐 " + question[:60], "cerco online…")
+            print("🌐 cerco online…")
+            web_answer = websearch.answer_with_search(question, cfg.ollama_url,
+                                                      cfg.assistant_model or cfg.ollama_model)
+            if web_answer:
+                self.assistant.history.append({"role": "user", "content": question})
+                self.assistant.history.append({"role": "assistant", "content": web_answer})
+                if self.assistant.memory:
+                    self.assistant.memory.append("user", question + " [ricerca web]")
+                    self.assistant.memory.append("assistant", web_answer)
+                inject.set_clipboard(web_answer)
+                _notify("🌐 Assistente", web_answer)
+                print("🌐 %s" % web_answer)
+                if cfg.assistant_voice_enabled:
+                    self.assistant.speak(web_answer)
+                return
+            print("(ricerca web fallita, rispondo in locale)")
         # Does the question refer to the screen? If so, grab it for the vision model.
         image_b64, vmodel = None, None
         ql = question.lower()
@@ -490,6 +533,18 @@ class LocalFlowDaemon:
     def new_conversation(self) -> None:
         self.assistant.reset()
         print("(assistente: nuova conversazione)")
+
+    def set_boost(self, enabled: bool) -> bool:
+        """Boost Ultra = route to Claude. Session-only (never persisted): it
+        costs money, so it must never silently survive a restart. Returns the
+        effective state (False if enabling failed for lack of an API key)."""
+        if enabled and not cloud.available():
+            _notify("🚀 Boost non attivo", "Manca la chiave API di Claude (menu → Boost → Imposta chiave).")
+            self._boost = False
+            return False
+        self._boost = enabled
+        print("Boost Ultra: %s" % ("ON (Claude)" if enabled else "off (locale)"))
+        return enabled
 
     def _maybe_paragraphs(self, text, app_name):
         """Reflow into paragraphs/bullets when the mode and app call for it."""
