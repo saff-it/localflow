@@ -73,7 +73,7 @@ terms = []             # e.g. ["LocalMind Lab", "Traefik", "n8n"]
 
 [output]
 paste = true             # false = only copy the text to the clipboard
-restore_clipboard = true # put the previous clipboard content back after pasting
+restore_clipboard = false # false = la dettatura resta negli appunti (comportamento da tool di dettatura)
 sounds = true            # feedback sounds on record start / text ready
 """
 
@@ -117,7 +117,7 @@ class Config:
     terms: List[str] = dataclasses.field(default_factory=list)
     replacements: Dict[str, str] = dataclasses.field(default_factory=dict)
     paste: bool = True
-    restore_clipboard: bool = True
+    restore_clipboard: bool = False
     sounds: bool = True
 
 
