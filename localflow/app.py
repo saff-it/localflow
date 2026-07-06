@@ -414,14 +414,10 @@ class LocalFlowDaemon:
 
         def work():
             app_name = inject.frontmost_app()  # where the user was at key release
-            # Focus check at RELEASE, in parallel with transcription (its
-            # ~0.1-0.75s is free here): pasting into a non-field becomes
-            # clipboard + warning sound instead of a blind ⌘V.
-            editable = True if copy_mode else inject.focused_is_editable()
             with self._busy:
                 self.status = "trascrivo..."
                 try:
-                    self._process(clip, duration, app_name, copy_mode, session, editable)
+                    self._process(clip, duration, app_name, copy_mode, session)
                 except Exception as exc:  # never die silently in a worker thread
                     print("⚠️  errore dettatura: %s" % exc)
                 finally:
@@ -567,7 +563,7 @@ class LocalFlowDaemon:
                                         target=getattr(self, "_tr_target", None) or "English",
                                         context=context)
 
-    def _process(self, clip, duration, app_name, copy_mode=False, session=None, editable=True):
+    def _process(self, clip, duration, app_name, copy_mode=False, session=None):
         cfg = self.cfg
         started = time.time()
         streamed = False
@@ -635,11 +631,6 @@ class LocalFlowDaemon:
             inject.set_clipboard(text)
             _play(SOUND_COPY, cfg.sounds)
             print("[%4.1fs audio | asr %.1fs | %s] (negli appunti) %s" % (duration, asr_secs, lang, text))
-            return
-        if not editable:  # paste key outside a text field: nothing happens, just deny
-            _play(SOUND_WRONG, cfg.sounds)
-            print("[%4.1fs audio | asr %.1fs | %s] ✋ non in un campo di testo — dettatura annullata: %s"
-                  % (duration, asr_secs, lang, text))
             return
         if cfg.paste:
             # Slow processing + user moved on: never paste blind into another app.
