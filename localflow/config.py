@@ -44,7 +44,8 @@ streaming = true       # trascrivi MENTRE parli: al rilascio resta solo la coda 
 chunk_seconds = 7      # dimensione dei blocchi trascritti in corsa (tagliati nelle tue pause)
 
 [assistant]
-enabled = false        # assistente vocale locale (risponde a voce); richiede Ollama + un tasto funzione
+enabled = true         # assistente locale (risponde in notifica); richiede Ollama
+voice_enabled = false  # leggi la risposta ad alta voce? (canale primario = notifica)
 voice = "Alice"        # voce macOS per la risposta parlata (say -v ?); "" = voce di sistema
 rate = 0               # velocità voce (parole/min); 0 = predefinita
 model = ""             # modello LLM dell'assistente; "" = usa ollama_model
@@ -78,6 +79,7 @@ class Config:
     copy_hotkey: str = ""
     assistant_key: str = "alt_r"
     assistant_enabled: bool = True
+    assistant_voice_enabled: bool = False
     assistant_voice: str = "Alice"
     assistant_rate: int = 0
     assistant_model: str = ""
@@ -132,6 +134,7 @@ def load() -> Config:
 
     asst = data.get("assistant", {})
     cfg.assistant_enabled = bool(asst.get("enabled", cfg.assistant_enabled))
+    cfg.assistant_voice_enabled = bool(asst.get("voice_enabled", cfg.assistant_voice_enabled))
     cfg.assistant_voice = asst.get("voice", cfg.assistant_voice)
     cfg.assistant_rate = int(asst.get("rate", cfg.assistant_rate))
     cfg.assistant_model = asst.get("model", cfg.assistant_model)

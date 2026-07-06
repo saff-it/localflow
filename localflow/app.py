@@ -11,8 +11,21 @@ import threading
 import time
 
 from . import assistant as assistant_mod
+from . import asst_memory
 from . import audio, config, formatter, hotkey, inject, streaming, textproc
 from .transcriber import create_transcriber
+
+
+def _notify(title: str, text: str) -> None:
+    """macOS notification via osascript — works from launchd, no rumps needed."""
+    def esc(s):
+        return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    try:
+        subprocess.Popen(
+            ["osascript", "-e", 'display notification "%s" with title "%s"' % (esc(text[:230]), esc(title))],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 SOUND_START = "/System/Library/Sounds/Pop.aiff"
 SOUND_DONE = "/System/Library/Sounds/Glass.aiff"
@@ -112,11 +125,13 @@ class LocalFlowDaemon:
         self._listener = None
         self._session = None
         self._monitor_stop = threading.Event()
-        self.assistant = assistant_mod.Assistant(cfg.ollama_url,
-                                                 cfg.assistant_model or cfg.ollama_model,
-                                                 voice=cfg.assistant_voice, rate=cfg.assistant_rate)
+        self.assistant = assistant_mod.Assistant(
+            cfg.ollama_url, cfg.assistant_model or cfg.ollama_model,
+            voice=cfg.assistant_voice, rate=cfg.assistant_rate,
+            speak_enabled=cfg.assistant_voice_enabled, memory=asst_memory.AssistantMemory())
         if cfg.assistant_enabled:
-            print("Assistente vocale: on — tieni premuto '%s', chiedi, rilascia" % cfg.assistant_key)
+            print("Assistente: on — tieni premuto '%s', chiedi, rilascia (voce %s)"
+                  % (cfg.assistant_key, "on" if cfg.assistant_voice_enabled else "off"))
         if cfg.streaming_enabled and getattr(self.transcriber, "supports_streaming", False):
             print("Streaming: on — trascrivo mentre parli (blocchi da %.0fs)" % cfg.chunk_seconds)
         threading.Thread(target=self._wake_watch, daemon=True).start()
@@ -431,12 +446,21 @@ class LocalFlowDaemon:
         if not question:
             return
         print("🎙️  %s" % question)
+        _notify("💬 " + question[:60], "sto pensando…")
         # Streamed: the first sentence is SPOKEN while the rest still generates.
         answer = self.assistant.ask_and_speak(question)
         inject.set_clipboard(answer)  # full answer on the clipboard, to paste if wanted
+        _notify("🤖 Assistente", answer)  # primary channel: read it
         print("🤖 %s" % answer)
         if answer.startswith("Scusa, non sono riuscito"):
             _play(SOUND_WRONG, cfg.sounds)
+
+    def set_assistant_voice(self, enabled: bool) -> None:
+        config.set_key("voice_enabled", "true" if enabled else "false")
+        self.cfg.assistant_voice_enabled = enabled
+        self.assistant.speak_enabled = enabled
+        if not enabled:
+            self.assistant.stop_speaking()
 
     def new_conversation(self) -> None:
         self.assistant.reset()

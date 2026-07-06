@@ -116,6 +116,9 @@ class LocalFlowMenuApp(rumps.App):
             self.asst_items[code] = item
             asst_menu.add(item)
         asst_menu.add(rumps.separator)
+        self.asst_voice_item = rumps.MenuItem("Risposta a voce", callback=self._toggle_asst_voice)
+        self.asst_voice_item.state = 1 if cfg.assistant_voice_enabled else 0
+        asst_menu.add(self.asst_voice_item)
         asst_menu.add(rumps.MenuItem("Nuova conversazione", callback=self._new_conversation))
         self.asst_menu = asst_menu
         self.login_item = rumps.MenuItem("Avvia al login", callback=self._toggle_login)
@@ -241,6 +244,12 @@ class LocalFlowMenuApp(rumps.App):
                 item.state = 1 if c == code else 0
             threading.Thread(target=self.daemon.set_assistant_key, args=(code,), daemon=True).start()
         return cb
+
+    def _toggle_asst_voice(self, item):
+        if self.daemon is None:
+            return
+        item.state = 0 if item.state else 1
+        self.daemon.set_assistant_voice(bool(item.state))
 
     def _new_conversation(self, _item):
         if self.daemon is not None:

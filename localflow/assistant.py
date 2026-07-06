@@ -31,12 +31,15 @@ MIN_CLAUSE_CHARS = 60   # flush at a comma only once the clause is meaty enough
 
 
 class Assistant:
-    def __init__(self, url: str, model: str, voice: str = "Alice", rate: int = 0):
+    def __init__(self, url: str, model: str, voice: str = "Alice", rate: int = 0,
+                 speak_enabled: bool = True, memory=None):
         self.url = url
         self.model = model
         self.voice = voice
         self.rate = rate
-        self.history: List[dict] = []
+        self.speak_enabled = speak_enabled
+        self.memory = memory                       # AssistantMemory | None
+        self.history: List[dict] = memory.recent_turns() if memory else []
         self._say_proc: Optional[subprocess.Popen] = None
         self._lock = threading.Lock()
         self._speak_gen = 0            # bumped on every barge-in / new question
@@ -79,6 +82,8 @@ class Assistant:
             self._say_proc = None
 
     def reset(self) -> None:
+        """Start a fresh conversation. The persistent .md log is NOT erased —
+        it's the permanent memory; only the active in-context history clears."""
         self.stop_speaking()
         self.history = []
 
@@ -90,6 +95,8 @@ class Assistant:
         self.stop_speaking()
         gen = self._speak_gen
         self.history.append({"role": "user", "content": question})
+        if self.memory:
+            self.memory.append("user", question)
         messages = [{"role": "system", "content": SYSTEM_PROMPT}] + self.history[-2 * MAX_TURNS:]
         buf, full = "", []
         try:
@@ -111,6 +118,8 @@ class Assistant:
                         continue
                     buf += piece
                     full.append(piece)
+                    if not self.speak_enabled:
+                        continue  # text-only: skip the sentence-flush-to-voice
                     while True:  # flush speakable pieces to the voice ASAP:
                         # full sentences always; long clauses at a comma too,
                         # so a single long sentence still starts speaking early.
@@ -125,8 +134,10 @@ class Assistant:
         except (requests.RequestException, ValueError, KeyError) as exc:
             self.history.pop()  # don't poison history with a failed turn
             return "Scusa, non sono riuscito a rispondere (%s)." % type(exc).__name__
-        if buf.strip() and gen == self._speak_gen:
+        if self.speak_enabled and buf.strip() and gen == self._speak_gen:
             self._say_queue.put((gen, buf.strip()))
         answer = "".join(full).strip()
         self.history.append({"role": "assistant", "content": answer})
+        if self.memory:
+            self.memory.append("assistant", answer)
         return answer
