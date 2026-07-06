@@ -6,8 +6,15 @@ LocalFlow. macOS auto-repeats key-down events while a key is held, hence the gua
 from pynput import keyboard
 
 
+# macOS quirk: pynput reports LEFT modifiers as the GENERIC key (Key.cmd,
+# Key.alt, Key.ctrl) — only the right-hand ones carry the _r suffix. A holder
+# waiting for Key.cmd_l would never fire.
+_DARWIN_LEFT = {"cmd_l": "cmd", "alt_l": "alt", "ctrl_l": "ctrl", "shift_l": "shift"}
+
+
 def parse_key(name: str):
     name = name.strip().lower()
+    name = _DARWIN_LEFT.get(name, name)
     if len(name) == 1:
         return keyboard.KeyCode.from_char(name)
     try:
