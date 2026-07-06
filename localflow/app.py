@@ -276,7 +276,10 @@ class LocalFlowDaemon:
                 break
 
     def _cancel_hold(self):
-        """A modifier shortcut (⌘C etc) used the assistant key: abort silently."""
+        """A modifier shortcut used the assistant key: abort silently. NEVER
+        touches a dictation hold — only an in-progress assistant recording."""
+        if getattr(self, "_mode", None) != "assistant":
+            return
         self._holding = False
         self._cancelled = True
         try:
@@ -579,8 +582,8 @@ class LocalFlowDaemon:
             if asst_holder is not None:
                 if key == asst_key:
                     astate["down"] = True
-                elif astate["down"]:
-                    self._cancel_hold()
+                elif astate["down"] and getattr(self, "_mode", None) == "assistant":
+                    self._cancel_hold()  # only cancels an assistant hold, never dictation
                 asst_holder._on_press(key)
 
         def on_release(key):

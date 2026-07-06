@@ -57,8 +57,13 @@ Interruttore hard nel config: `[assistant] enabled=false` spegne tutto all'istan
   per la dettatura → si fa per primo e in isolamento.
 - **Fase 2 — Assistente v2 locale**: rewrite pulito, notifiche macOS, voce toggle,
   memoria .md (append + contesto intelligente), nuova conversazione. Tutto offline.
-- **Fase 3 — Cervello cloud (Claude, testo)**: `cloud.py` + dialogo conferma +
-  storage segreto. Domande difficili → offri cloud. Serve API key.
+- **Fase 3 — Cervello cloud (Claude, testo) + INTERNET**: `cloud.py` + dialogo
+  conferma + storage segreto. Domande difficili → offri cloud. **Ricerca web via
+  lo strumento web-search di Claude** (cerca online e cita le fonti): è il terzo
+  trigger del canale cloud-con-conferma (info fresche: notizie/oggi/prezzi). Non
+  esiste internet "locale" — ogni ricerca esce dal Mac → sempre con conferma. Sia
+  suggerita da lui ("serve info aggiornata, cerco?") sia imposta da te ("cerca
+  online X"). Serve API key.
 - **Fase 4 — Vista**: `screen.py` cattura+purge; domande-schermo → conferma →
   Claude vision → risposta. Il gioiello.
 
