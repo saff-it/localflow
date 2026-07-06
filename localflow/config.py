@@ -76,8 +76,8 @@ sounds = true            # feedback sounds on record start / text ready
 class Config:
     hotkey: str = "alt_r"
     copy_hotkey: str = ""
-    assistant_key: str = ""
-    assistant_enabled: bool = False
+    assistant_key: str = "alt_r"
+    assistant_enabled: bool = True
     assistant_voice: str = "Alice"
     assistant_rate: int = 0
     assistant_model: str = ""

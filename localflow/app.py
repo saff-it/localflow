@@ -556,37 +556,39 @@ class LocalFlowDaemon:
 
         from pynput import keyboard
 
-        holders = [hotkey.HoldToTalk(hotkey.parse_key(self.cfg.hotkey),
-                                     partial(self._on_start, "paste"), self._on_stop)]
-        if self.cfg.copy_hotkey and self.cfg.copy_hotkey != self.cfg.hotkey:
-            holders.append(hotkey.HoldToTalk(hotkey.parse_key(self.cfg.copy_hotkey),
-                                             partial(self._on_start, "copy"), self._on_stop))
+        # cmd_r: plain hold = dictate & paste; tap-then-hold = copy.
+        dict_key = hotkey.parse_key(self.cfg.hotkey)
+        dict_gesture = hotkey.TapThenHold(
+            dict_key,
+            lambda g: self._on_start("copy" if g == "armed" else "paste"),
+            self._on_stop,
+        )
 
-        # The assistant key gets a combo-cancel guard: if any OTHER key is
-        # pressed while it's held, it was a shortcut (⌘C etc), not a question.
+        # Assistant on its own key, with combo-cancel: another key pressed while
+        # it's held = a shortcut, not a question.
         asst_key = None
         if self.cfg.assistant_enabled and self.cfg.assistant_key:
             asst_key = hotkey.parse_key(self.cfg.assistant_key)
         asst_holder = (hotkey.HoldToTalk(asst_key, partial(self._on_start, "assistant"), self._on_stop)
                        if asst_key is not None else None)
-        state = {"asst_down": False}
+        astate = {"down": False}
 
         def on_press(key):
-            for holder in holders:
-                holder._on_press(key)
+            if key == dict_key:
+                dict_gesture.press()
             if asst_holder is not None:
                 if key == asst_key:
-                    state["asst_down"] = True
-                elif state["asst_down"]:
-                    self._cancel_hold()  # another key while assistant held = shortcut
+                    astate["down"] = True
+                elif astate["down"]:
+                    self._cancel_hold()
                 asst_holder._on_press(key)
 
         def on_release(key):
-            for holder in holders:
-                holder._on_release(key)
+            if key == dict_key:
+                dict_gesture.release()
             if asst_holder is not None:
                 if key == asst_key:
-                    state["asst_down"] = False
+                    astate["down"] = False
                 asst_holder._on_release(key)
 
         self._listener = keyboard.Listener(on_press=on_press, on_release=on_release)

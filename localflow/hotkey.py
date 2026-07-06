@@ -25,6 +25,46 @@ def parse_key(name: str):
         )
 
 
+class TapThenHold:
+    """One key, two gestures. A plain hold fires on_start("primary"); a quick
+    TAP (held < tap_max, typically no speech) immediately followed by a hold
+    (within window) fires on_start("armed"). A normal dictation hold is long,
+    so it never arms — single-hold stays zero-latency. Clock injectable for tests.
+    """
+
+    def __init__(self, key, on_start, on_stop, tap_max=0.35, window=0.45, clock=None):
+        import time as _time
+
+        self.key = key
+        self.on_start = on_start
+        self.on_stop = on_stop
+        self.tap_max = tap_max
+        self.window = window
+        self._clock = clock or _time.monotonic
+        self._down = False
+        self._press_t = 0.0
+        self._last_release = -1e9
+        self._last_short = False
+
+    def press(self) -> None:
+        if self._down:  # macOS auto-repeat while held
+            return
+        self._down = True
+        now = self._clock()
+        self._press_t = now
+        armed = (now - self._last_release < self.window) and self._last_short
+        self.on_start("armed" if armed else "primary")
+
+    def release(self) -> None:
+        if not self._down:
+            return
+        self._down = False
+        now = self._clock()
+        self._last_short = (now - self._press_t) < self.tap_max
+        self._last_release = now
+        self.on_stop()
+
+
 class HoldToTalk:
     """on_start fires when the key goes down, on_stop when it comes back up."""
 
