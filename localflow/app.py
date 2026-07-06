@@ -99,14 +99,15 @@ class LocalFlowDaemon:
         if self.ollama_up and cfg.punctuate_enabled:
             print("Punteggiatura di soccorso: on (solo su dettature lunghe senza segni)")
         if self.ollama_up and (self.use_llm or cfg.punctuate_enabled or self._llm_translate
-                               or cfg.paragraphs != "never"):
+                               or cfg.paragraphs != "never" or cfg.assistant_enabled):
             threading.Thread(target=formatter.warmup, args=(cfg.ollama_url, cfg.ollama_model), daemon=True).start()
         self._busy = threading.Lock()
         self._last_paste = 0.0
         self._listener = None
         self._session = None
         self._monitor_stop = threading.Event()
-        self.assistant = assistant_mod.Assistant(cfg.ollama_url, cfg.ollama_model,
+        self.assistant = assistant_mod.Assistant(cfg.ollama_url,
+                                                 cfg.assistant_model or cfg.ollama_model,
                                                  voice=cfg.assistant_voice, rate=cfg.assistant_rate)
         if cfg.assistant_enabled:
             print("Assistente vocale: on — tieni premuto '%s', chiedi, rilascia" % cfg.assistant_key)
@@ -410,21 +411,18 @@ class LocalFlowDaemon:
         if not audio.has_speech(clip, cfg.sample_rate):
             print("(assistente: nessuna domanda rilevata)")
             return
-        if not formatter.available(cfg.ollama_url):
-            _play(SOUND_WRONG, cfg.sounds)
-            print("⚠️  assistente non disponibile: Ollama spento (brew services start ollama)")
-            return
         pieces = audio.split_on_silence(clip, cfg.sample_rate)
         question = textproc.tidy(textproc.join_chunks(self.transcriber.transcribe(p)[0] for p in pieces))
         self._mark_engine_use()
         if not question:
             return
         print("🎙️  %s" % question)
-        answer = self.assistant.ask(question)
-        inject.set_clipboard(answer)  # answer also on the clipboard, to paste if wanted
-        _play(SOUND_DONE, cfg.sounds)
+        # Streamed: the first sentence is SPOKEN while the rest still generates.
+        answer = self.assistant.ask_and_speak(question)
+        inject.set_clipboard(answer)  # full answer on the clipboard, to paste if wanted
         print("🤖 %s" % answer)
-        self.assistant.speak(answer)
+        if answer.startswith("Scusa, non sono riuscito"):
+            _play(SOUND_WRONG, cfg.sounds)
 
     def new_conversation(self) -> None:
         self.assistant.reset()
