@@ -7,3 +7,4 @@ __pycache__/
 .localflow-secrets
 vision/
 *.secrets
+bin/

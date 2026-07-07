@@ -1,18 +1,35 @@
 # LocalFlow
 
-Private, fully-local voice dictation for macOS — a Wispr Flow-style workflow where **nothing ever leaves your Mac**. Hold a key, speak (Italian, English, Spanish — anything Whisper knows), release: polished text is pasted into whatever app has focus.
+**Private, fully-local voice dictation + AI assistant for macOS (Apple Silicon).** Hold a key, speak, release — polished text lands in whatever app has focus. Everything runs on your Mac: **nothing leaves the machine** unless you explicitly turn on the optional cloud boost.
 
-Wispr Flow sends every utterance to cloud ASR + a fine-tuned Llama on Baseten. LocalFlow runs the same two-stage pipeline on-device: **faster-whisper** for speech recognition and (optionally) a small **Llama via Ollama** for Wispr-style cleanup — fillers removed, self-corrections applied, tone matched to the app you're pasting into. The design rationale lives in [docs/superpowers/specs/2026-07-02-localflow-design.md](docs/superpowers/specs/2026-07-02-localflow-design.md).
+> ⚠️ **Not affiliated with, endorsed by, or connected to Wispr Flow.** LocalFlow is an independent open-source project, inspired by that class of dictation tools, built to run entirely on-device.
+
+## What it does
+
+- 🎤 **Dictation** — hold ⌘-right, speak, release → text pasted where you're typing. Whisper (large-v3-turbo) on the Apple GPU via [whisper.cpp](https://github.com/ggml-org/whisper.cpp); streaming transcription so long dictations come back in ~1s.
+- 📋 **Copy mode** — tap-then-hold to send the dictation to the clipboard instead of pasting.
+- 🌍 **Translation** — speak Italian, get English/Spanish/French/German out (native Whisper or an LLM for natural phrasing).
+- 🤖 **Local voice assistant** (⌥-right) — ask questions, get answers via a local LLM ([Ollama](https://ollama.com)); remembers the conversation across restarts; replies by macOS notification (+ optional voice).
+- 🌐 **Free internet** — the assistant searches DuckDuckGo and synthesizes locally, no API key.
+- 👁️ **Screen vision** — "look at my screen and help me with this" via a small local vision model.
+- 🚀 **Boost Ultra (optional, paid)** — flip a switch to route hard questions, live web search and screen understanding to the Claude API. Off by default, session-only, shows the cost of each call. Your API key stays in `~/.localflow/secrets` (never in the repo).
+
+Design notes and the (long, honest) build story live in [docs/](docs/).
+
+## Requirements
+
+- **Apple Silicon Mac** (M1–M4). Intel Macs work via the CPU fallback but the large models are too slow to be pleasant.
+- **Homebrew**, **Python 3.9+**.
+- The speech engine: `brew install whisper-cpp` (Metal GPU). LocalFlow also looks for an optional CoreML-optimized build in `bin/` for Apple-Neural-Engine speed — advanced, build it yourself from [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with `WHISPER_COREML=1` if you want it; the Homebrew binary is enough to start.
+- Optional, for the assistant: `brew install ollama` + `ollama pull qwen2.5:7b` (chat), `ollama pull qwen2.5vl:3b` (vision).
 
 ## Install
 
 ```bash
-cd localflow
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+./install.sh          # whisper-cpp, venv, model download, LaunchAgent
 ```
 
-First run downloads the Whisper model once (to `~/.cache/huggingface`); after that it's 100% offline.
+First run downloads the Whisper model once; after that dictation is 100% offline. Grant Microphone, Accessibility and Input-Monitoring to the app (`localflow setup` prints the checklist).
 
 On flaky connections the automatic download can stall — use the built-in resumable downloader instead (Range-resume, retries, sha256 verification; lands in `~/.localflow/models/`, which takes priority over the HF cache):
 
