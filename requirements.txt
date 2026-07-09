@@ -1,6 +1,10 @@
 faster-whisper>=1.0
 sounddevice>=0.4.6
-pynput>=1.7.6
+# pynput PINNED: 1.8.x queries macOS keyboard input sources off the main thread
+# (HIToolbox TSMGetInputSourceProperty) -> dispatch_assert_queue SIGTRAP crash-loop
+# on recent macOS. Symptoms: 0.00s recordings, daemon restarts, EMPTY err.log
+# (native crash). Verified on Python 3.14 + macOS 25.5, 9 Jul 2026.
+pynput==1.7.6
 numpy
 requests
 rumps>=0.4

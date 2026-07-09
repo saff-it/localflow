@@ -116,6 +116,7 @@ The script installs whisper-cpp via Homebrew, builds the venv, downloads the mod
 
 ## Troubleshooting
 
+- **Recordings come back as 0.00s and the daemon keeps restarting (err.log empty)** → pynput 1.8.x crashes natively on recent macOS (off-main-thread keyboard-input-source call → SIGTRAP; check `~/Library/Logs/DiagnosticReports/` for Python `.ips` files). Keep `pynput==1.7.6` as pinned in `requirements.txt`.
 - **Nothing pastes, but the text is on the clipboard** → Accessibility permission missing.
 - **Hotkey does nothing** → Input Monitoring permission missing (and restart the terminal).
 - **Empty transcripts** → Microphone permission missing, or utterance under 0.3 s.
