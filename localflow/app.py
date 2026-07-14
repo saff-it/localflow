@@ -4,6 +4,8 @@ LocalFlowDaemon is UI-agnostic: `localflow run` drives it headless from the
 terminal, `localflow ui` wraps it in a menu-bar app. Language and polish can
 be changed at runtime (the ASR engine is rebuilt behind the busy lock).
 """
+import contextlib
+import os
 import signal
 import subprocess
 import sys
@@ -12,7 +14,7 @@ import time
 
 from . import assistant as assistant_mod
 from . import asst_memory, cloud
-from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc, websearch
+from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc, watchdog, websearch
 from .transcriber import create_transcriber
 
 # Words that mean "look at my screen" — trigger a screenshot for the vision model.
@@ -144,7 +146,24 @@ class LocalFlowDaemon:
         if cfg.streaming_enabled and getattr(self.transcriber, "supports_streaming", False):
             print("Streaming: on — trascrivo mentre parli (blocchi da %.0fs)" % cfg.chunk_seconds)
         threading.Thread(target=self._wake_watch, daemon=True).start()
+        # Freeze safety net: dumps stacks + self-restarts if a dictation wedges.
+        # None while idle; (monotonic_start, label) while one is in flight.
+        self._inflight = None
+        watchdog.install(lambda: self._inflight, config.CONFIG_DIR)
+        print("watchdog: pid %d — se si blocca:  kill -USR1 %d  (stack -> %s/freeze.log)"
+              % (os.getpid(), os.getpid(), config.CONFIG_DIR))
         self.status = "pronto"
+
+    @contextlib.contextmanager
+    def _track(self, label):
+        """Mark a work item in flight so the freeze watchdog can spot a wedge.
+        Wraps the whole worker (including the pre-lock AX/focus query and the
+        wait for _busy), since any of those can hang."""
+        self._inflight = (time.monotonic(), label)
+        try:
+            yield
+        finally:
+            self._inflight = None
 
     def _wake_watch(self):
         """Keep the engine hot. Two enemies: (1) standby evicts the model from
@@ -401,7 +420,7 @@ class LocalFlowDaemon:
 
         if mode == "assistant":
             def ask():
-                with self._busy:
+                with self._track("assistente"), self._busy:
                     self.status = "penso..."
                     try:
                         self._assistant_process(clip, duration)
@@ -413,15 +432,16 @@ class LocalFlowDaemon:
             return
 
         def work():
-            app_name = inject.frontmost_app()  # where the user was at key release
-            with self._busy:
-                self.status = "trascrivo..."
-                try:
-                    self._process(clip, duration, app_name, copy_mode, session)
-                except Exception as exc:  # never die silently in a worker thread
-                    print("⚠️  errore dettatura: %s" % exc)
-                finally:
-                    self.status = "pronto"
+            with self._track("dettatura"):
+                app_name = inject.frontmost_app()  # where the user was at key release
+                with self._busy:
+                    self.status = "trascrivo..."
+                    try:
+                        self._process(clip, duration, app_name, copy_mode, session)
+                    except Exception as exc:  # never die silently in a worker thread
+                        print("⚠️  errore dettatura: %s" % exc)
+                    finally:
+                        self.status = "pronto"
 
         threading.Thread(target=work, daemon=True).start()
 
