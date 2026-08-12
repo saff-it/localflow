@@ -107,6 +107,8 @@ class LocalFlowMenuApp(rumps.App):
             self.para_items[code] = item
             para_menu.add(item)
         self.para_menu = para_menu
+        self.structure_item = rumps.MenuItem("Liste e paragrafi", callback=self._toggle_structure)
+        self.structure_item.state = 1 if cfg.structure_enabled else 0
         self.asst_items = {}
         asst_menu = rumps.MenuItem("Assistente vocale")
         for label, code in ASSISTANT_KEYS:
@@ -132,7 +134,8 @@ class LocalFlowMenuApp(rumps.App):
         recent = rumps.MenuItem("Ultime dettature", callback=self._show_recent)
         restart = rumps.MenuItem("Riavvia LocalFlow", callback=self._restart)
         self.menu = [self.status_item, self.pause_item, None, lang_menu, self.model_menu, self.hotkey_menu,
-                     self.copykey_menu, self.translation_menu, self.para_menu, self.asst_menu, None, recent, None,
+                     self.copykey_menu, self.translation_menu, self.para_menu, self.structure_item,
+                     self.asst_menu, None, recent, None,
                      self.login_item, open_cfg, restart, None]
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._refresh_status, 1).start()
@@ -240,6 +243,12 @@ class LocalFlowMenuApp(rumps.App):
             config.set_key("paragraphs", '"%s"' % code)
             self.daemon.cfg.paragraphs = code
         return cb
+
+    def _toggle_structure(self, item):
+        if self.daemon is None:
+            return
+        item.state = 0 if item.state else 1
+        self.daemon.set_structure(bool(item.state))
 
     def _make_asst_cb(self, code):
         def cb(_item):

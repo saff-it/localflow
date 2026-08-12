@@ -59,6 +59,7 @@ cloud_model = "claude-sonnet-4-5"  # modello Claude per il Boost Ultra (a pagame
 enabled = true         # AI cleanup via local Ollama; skipped automatically when Ollama isn't running
 punctuate = false      # rescue pass on long unpunctuated dictations — costs ~5GB RAM parked for the LLM
 paragraphs = "auto"    # auto (paragrafi solo fuori dalle chat) | always | never — spezza testi lunghi in paragrafi/elenchi
+structure = true       # liste e paragrafi a REGOLE: nessun modello, nessuna attesa, nessuna parola cambiata
 ollama_url = "http://127.0.0.1:11434"
 ollama_model = "llama3.2:3b"
 app_aware_tone = true  # tell the LLM which app the text is being pasted into
@@ -111,6 +112,7 @@ class Config:
     format_enabled: bool = True
     punctuate_enabled: bool = False
     paragraphs: str = "auto"
+    structure_enabled: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:3b"
     app_aware_tone: bool = True
@@ -177,6 +179,7 @@ def load() -> Config:
     cfg.format_enabled = bool(fmt.get("enabled", cfg.format_enabled))
     cfg.punctuate_enabled = bool(fmt.get("punctuate", cfg.punctuate_enabled))
     cfg.paragraphs = fmt.get("paragraphs", cfg.paragraphs)
+    cfg.structure_enabled = bool(fmt.get("structure", cfg.structure_enabled))
     cfg.ollama_url = fmt.get("ollama_url", cfg.ollama_url).rstrip("/")
     cfg.ollama_model = fmt.get("ollama_model", cfg.ollama_model)
     cfg.app_aware_tone = bool(fmt.get("app_aware_tone", cfg.app_aware_tone))

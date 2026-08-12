@@ -14,7 +14,7 @@ import time
 
 from . import assistant as assistant_mod
 from . import asst_memory, cloud
-from . import audio, config, formatter, hotkey, inject, screen, streaming, textproc, watchdog, websearch
+from . import audio, config, formatter, hotkey, inject, screen, streaming, structure, textproc, watchdog, websearch
 from .transcriber import create_transcriber
 
 # Words that mean "look at my screen" — trigger a screenshot for the vision model.
@@ -291,6 +291,10 @@ class LocalFlowDaemon:
     def set_streaming(self, enabled: bool) -> None:
         config.set_key("streaming", "true" if enabled else "false")
         self.cfg.streaming_enabled = enabled
+
+    def set_structure(self, enabled: bool) -> None:
+        config.set_key("structure", "true" if enabled else "false")
+        self.cfg.structure_enabled = enabled
 
     def set_polish(self, enabled: bool) -> None:
         config.set_key("enabled", "true" if enabled else "false")
@@ -658,6 +662,9 @@ class LocalFlowDaemon:
         text = textproc.apply_dictionary(text, cfg.replacements)
         fmt_started = time.time()  # reflow cost must NEVER be invisible in the log
         text = self._maybe_paragraphs(text, app_name)
+        # Lists and paragraphs by rule: no model, no RAM, no wait. Runs after the
+        # dictionary so replacements never land inside a bullet marker.
+        text = structure.apply(text, cfg.structure_enabled)
         llm_secs += time.time() - fmt_started
         if copy_mode:  # copy hotkey: clipboard only, paste it wherever you like
             inject.set_clipboard(text)
