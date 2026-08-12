@@ -19,12 +19,12 @@ import numpy as np
 MIN_SPEECH_RMS = 0.006
 
 
-def has_speech(clip: np.ndarray, sample_rate: int) -> bool:
+def has_speech(clip: np.ndarray, sample_rate: int, threshold: float = 0.0) -> bool:
     """True only with SUSTAINED speech-level energy: >=5 hot 100ms windows at
     50ms hop (~250ms cumulative). A single loud transient — the mechanical
     key click that fooled the first single-frame gate into 'Grazie a tutti' —
     lights up 1-3 windows; real voice starts at 7+ (measured on the user's mic)."""
-    threshold = MIN_SPEECH_RMS
+    threshold = threshold or MIN_SPEECH_RMS
     frame = int(0.1 * sample_rate)
     hop = frame // 2
     hot = 0

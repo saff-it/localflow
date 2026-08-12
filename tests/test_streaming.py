@@ -90,5 +90,36 @@ class StreamingSessionTests(unittest.TestCase):
         self.assertEqual(fake.calls, [])
 
 
+class QuietSpeechIsNeverLostSilentlyTests(unittest.TestCase):
+    """A chunk of QUIET speech falls under the anti-hallucination gate and is
+    dropped. Dropping it is fine; dropping it in silence is not: the caller
+    must be told, so it can redo the dictation the classic way instead of
+    pasting a quarter of what was said."""
+
+    def test_quiet_chunk_is_reported_as_suspect(self):
+        fake = FakeTranscriber()
+        s = StreamingSession(fake, SR, chunk_seconds=6)
+        s.feed(tone(6, level=0.5))          # normal voice
+        wait_done(s, fake, 1)
+        s.feed(tone(14, level=0.0056))      # same speech, spoken quietly: rms ~0.004
+        wait_done(s, fake, 2, timeout=1.0)
+        texts, _, _ = s.finish(tone(2, level=0.5))
+        transcribed = sum(c["secs"] for c in fake.calls)
+        self.assertLess(transcribed, s.total_seconds - 5,
+                        "quiet-only chunks reached the model instead of being gated")
+        self.assertGreaterEqual(s.suspect_drops, 1, "a quiet-speech chunk was dropped unreported")
+        self.assertGreaterEqual(s.dropped_seconds, 6.0)
+
+    def test_real_silence_is_not_suspect(self):
+        """A long thinking pause must not trigger a pointless redo."""
+        fake = FakeTranscriber()
+        s = StreamingSession(fake, SR, chunk_seconds=5)
+        s.feed(tone(5, level=0.5))
+        wait_done(s, fake, 1)
+        s.feed(silence(6, level=0.0009))    # the user's measured room noise floor
+        texts, _, _ = s.finish(tone(1, level=0.5))
+        self.assertEqual(s.suspect_drops, 0, "room noise must not look like lost speech")
+
+
 if __name__ == "__main__":
     unittest.main()

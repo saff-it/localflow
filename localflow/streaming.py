@@ -20,6 +20,15 @@ from . import audio
 
 MIN_CHUNK_SECONDS = 3.0     # never commit crumbs: seams are where errors live
 
+# A chunk that fails the gate but still carries sustained energy well above the
+# room noise floor (measured on the user's mic: ~0.0009 rms, against 0.003-0.005
+# for quiet speech) is not a pause: it is speech spoken too softly. Dropping it
+# is right — the model hallucinates on faint audio — but it must be REPORTED, or
+# the dictation comes back missing a quarter of the words with nothing in the log.
+SUSPECT_RATIO = 0.5         # half the gate: comfortably above noise, under speech
+SUSPECT_MIN_SECONDS = 1.0   # ignore crumbs: only whole slices of speech matter
+REDO_MIN_SECONDS = 1.5      # under ~17 characters lost: not worth the slow path
+
 
 class StreamingSession:
     def __init__(self, transcriber, sample_rate: int, chunk_seconds: float = 7.0,
@@ -35,6 +44,8 @@ class StreamingSession:
         self._texts: List[str] = []       # final (post-processed) texts, in order
         self._raw_texts: List[str] = []   # ASR-language texts: the rolling ASR context
         self._lang = ""
+        self.suspect_drops = 0        # chunks of quiet speech thrown away by the gate
+        self.dropped_seconds = 0.0    # how much of the dictation they carried
         self._queue: "queue.Queue[Optional[np.ndarray]]" = queue.Queue()
         self._done = threading.Event()
         self._error: Optional[Exception] = None
@@ -68,8 +79,17 @@ class StreamingSession:
         self._done.set()
 
     def _commit(self, chunk: np.ndarray) -> None:
-        if len(chunk) == 0 or not audio.has_speech(chunk, self.sample_rate):
-            return  # silence never reaches the model: no 'grazie mille' out of thin air
+        if len(chunk) == 0:
+            return
+        if not audio.has_speech(chunk, self.sample_rate):
+            # silence never reaches the model: no 'grazie mille' out of thin air.
+            # But tell the caller when what we dropped sounded like quiet speech.
+            seconds = len(chunk) / float(self.sample_rate)
+            if seconds >= SUSPECT_MIN_SECONDS and audio.has_speech(
+                    chunk, self.sample_rate, threshold=audio.MIN_SPEECH_RMS * SUSPECT_RATIO):
+                self.suspect_drops += 1
+                self.dropped_seconds += seconds
+            return
         self._queue.put(chunk)
 
     # -- fed by the monitor thread while the key is held -----------------------

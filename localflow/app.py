@@ -596,6 +596,15 @@ class LocalFlowDaemon:
                 text = textproc.join_chunks(texts)
                 clip = session.full_audio()  # complete audio, for the debug ring
                 streamed = True
+                if session.dropped_seconds >= streaming.REDO_MIN_SECONDS:
+                    # Quiet speech fell under the per-chunk gate. Those words are
+                    # simply gone from the streamed text, and the user would never
+                    # know. Redo the whole dictation the classic way: the gate then
+                    # runs ONCE on the full audio, where a single loud passage
+                    # carries the quiet ones through. Costs a few seconds, only here.
+                    print("↻ %.0fs di voce troppo bassa per lo streaming: rifaccio la dettatura intera"
+                          % session.dropped_seconds)
+                    streamed = False
             except Exception as exc:
                 print("⚠️  streaming fallito (%s): ripiego sul metodo classico" % exc)
                 clip = session.full_audio()
