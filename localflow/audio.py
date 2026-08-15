@@ -11,12 +11,17 @@ from typing import List, Optional
 import numpy as np
 
 
-# Calibrated twice on the user's real mic: daytime voice peaks >= 0.029, but
+# Calibrated three times on the user's real mic: daytime voice peaks >= 0.029,
 # LATE-NIGHT WHISPERED dictation sits at 0.016-0.022 with sustained windows
-# at 0.010+ (7-14 hot), while the key-click ghost lights only 1-3 windows at
-# any threshold. The sustained-count rule is the click killer; the RMS floor
-# just needs to sit under quiet speech. Overridable via config min_speech_rms.
-MIN_SPEECH_RMS = 0.006
+# at 0.010+ (7-14 hot), but the quietest real dictations measured (15 ago,
+# clip-1786822109/132) sustain only 0.003-0.006 for several seconds straight —
+# below the old 0.006 floor, so has_speech() rejected them outright even
+# though the words were there, silently, with no louder passage in the whole
+# clip for the classic-path redo to fall back on. The key-click ghost lights
+# only 1-3 windows at any threshold, so the sustained-count rule is still the
+# click killer; the RMS floor just needs clear room above the ~0.0009 room
+# noise floor and below 0.003. Overridable via config min_speech_rms.
+MIN_SPEECH_RMS = 0.0035
 
 
 def has_speech(clip: np.ndarray, sample_rate: int, threshold: float = 0.0) -> bool:

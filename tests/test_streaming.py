@@ -101,7 +101,7 @@ class QuietSpeechIsNeverLostSilentlyTests(unittest.TestCase):
         s = StreamingSession(fake, SR, chunk_seconds=6)
         s.feed(tone(6, level=0.5))          # normal voice
         wait_done(s, fake, 1)
-        s.feed(tone(14, level=0.0056))      # same speech, spoken quietly: rms ~0.004
+        s.feed(tone(14, level=0.0037))      # same speech, spoken quietly: rms ~0.0026
         wait_done(s, fake, 2, timeout=1.0)
         texts, _, _ = s.finish(tone(2, level=0.5))
         transcribed = sum(c["secs"] for c in fake.calls)
