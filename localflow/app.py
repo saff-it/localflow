@@ -14,7 +14,7 @@ import time
 
 from . import assistant as assistant_mod
 from . import asst_memory, cloud
-from . import audio, config, formatter, hotkey, inject, screen, streaming, structure, textproc, watchdog, websearch
+from . import audio, config, formatter, hotkey, inject, mic_healer, screen, streaming, structure, textproc, watchdog, websearch
 from .transcriber import create_transcriber
 
 # Words that mean "look at my screen" — trigger a screenshot for the vision model.
@@ -152,6 +152,15 @@ class LocalFlowDaemon:
         watchdog.install(lambda: self._inflight, config.CONFIG_DIR)
         print("watchdog: pid %d — se si blocca:  kill -USR1 %d  (stack -> %s/freeze.log)"
               % (os.getpid(), os.getpid(), config.CONFIG_DIR))
+        # Wedged-mic safety net. The watchdog above catches a dictation that
+        # starts and never ends; this catches the opposite — one that never
+        # starts, because CoreAudio hands us zero frames (2026-08-16).
+        self._mic_healer = mic_healer.MicHealer(
+            reopen=self.recorder.reopen,
+            restart=lambda: os._exit(1),  # launchd brings us back with a clean engine
+            notify=lambda msg: _notify("LocalFlow", msg),
+            probe=self._probe_mic,
+        )
         self.status = "pronto"
 
     @contextlib.contextmanager
@@ -181,6 +190,15 @@ class LocalFlowDaemon:
             if slept or idle:
                 threading.Thread(target=self._warm_engine, daemon=True).start()
             last = now
+
+    def _dictation_in_flight(self):
+        """True while the recorder belongs to the user, not to us."""
+        return getattr(self, "_holding", False) or self._session is not None
+
+    def _probe_mic(self):
+        # Policy lives in mic_healer so it can be tested with fakes; this side
+        # only supplies the real stream and the "hands off" signal.
+        return mic_healer.probe_capture(self.recorder, self._dictation_in_flight)
 
     def _mark_engine_use(self):
         self._last_engine_use = time.time()
@@ -415,9 +433,14 @@ class LocalFlowDaemon:
             print("(ignorato: %.2fs di audio — pressione troppo breve o mic muto)" % duration)
             if session is not None:
                 session.abort()
-            if duration == 0:  # zero frames while collecting = wedged stream: heal it
-                threading.Thread(target=self.recorder.reopen, daemon=True).start()
+            if duration == 0:  # zero frames while collecting = wedged capture path
+                # Off-thread: the remedy may restart coreaudiod and sleep, and
+                # this runs on the hotkey callback thread, which must stay free.
+                threading.Thread(target=self._mic_healer.on_empty, daemon=True).start()
             return
+
+        # Real audio arrived: the mic works, so forget any failures before it.
+        self._mic_healer.on_success()
 
         mode = getattr(self, "_mode", "paste")
         copy_mode = mode == "copy"
