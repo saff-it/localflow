@@ -9,6 +9,13 @@ try:
 except ModuleNotFoundError:  # Python 3.9 / 3.10
     import tomli as tomllib
 
+# La soglia della voce si calibra sui clip veri, quindi vive in audio.py insieme
+# alla misura. Qui la si legge e basta: `app.py` fa
+# `audio.MIN_SPEECH_RMS = cfg.min_speech_rms`, cioe' il config vince sempre sul
+# codice, e una seconda copia scritta a mano qui zittisce ogni ricalibrazione
+# (successo dal 15 al 21 agosto 2026: dettature scartate senza motivo apparente).
+from .audio import MIN_SPEECH_RMS
+
 CONFIG_DIR = pathlib.Path.home() / ".localflow"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
@@ -29,7 +36,7 @@ sample_rate = 16000
 device = ""            # "" = system default input device
 mic_release_seconds = 300 # release the mic (orange dot off) after N idle seconds; 0 = always ready
 debug_keep_audio = true   # keep the last 5 dictation clips in ~/.localflow/debug (local only) for tuning
-min_speech_rms = 0.006    # soglia voce del cancello anti-allucinazioni (abbassala se parli piano)
+min_speech_rms = @MIN_SPEECH_RMS@  # soglia voce del cancello anti-allucinazioni (abbassala se parli piano)
 
 [asr]
 engine = "auto"        # auto = whisper.cpp (Metal GPU) if available, else faster-whisper (CPU)
@@ -76,7 +83,7 @@ terms = []             # e.g. ["LocalMind Lab", "Traefik", "n8n"]
 paste = true             # false = only copy the text to the clipboard
 restore_clipboard = false # false = la dettatura resta negli appunti (comportamento da tool di dettatura)
 sounds = true            # feedback sounds on record start / text ready
-"""
+""".replace("@MIN_SPEECH_RMS@", repr(MIN_SPEECH_RMS))
 
 
 @dataclasses.dataclass
@@ -98,7 +105,7 @@ class Config:
     device: str = ""
     mic_release_seconds: float = 300.0
     debug_keep_audio: bool = True
-    min_speech_rms: float = 0.006
+    min_speech_rms: float = MIN_SPEECH_RMS
     model: str = "small"
     language: str = ""
     compute_type: str = "int8"
